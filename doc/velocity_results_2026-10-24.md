@@ -56,3 +56,14 @@ The evaluator initially missed assigning its diagnostic task to the physical cap
 Independent discriminator optimizer details also differ from the fork's PPO implementation: MBDACAMP follows the model-based learner's 2e-4 schedule and does not apply the fork's separate 0.001 trunk / 0.1 head weight decays. Both use LS-GAN and gradient penalty 10, expert features, width 1024/512/256 and the same task/style mixture. This is an algorithm comparison, not a claim that all optimizer settings are identical.
 
 Evidence: `logs/velocity_comparison_2000/comparison.json`, `logs/velocity_progress_2000.png`, `logs/velocity_eval_mbdacamp_{1000,1500,2000}/evaluation.json`, `logs/velocity_eval_mbdacamp_2000/forward.mp4` and `prior_audit.json`.
+
+### Command-path diagnostic during continuation
+
+Using the exact nominal initial observation, CPU actor outputs reproduce the
+first physical-evaluation action at 1000, 1500 and 2000 with maximum absolute
+difference 0. Changing only command values changes actor actions, confirming
+that commands reach the policy. At 2000, the forward-versus-stand policy-action
+RMS difference is 0.0487; at 2500 it is 0.0879. These are action coordinates before
+the native per-joint scale, not radians or a physical tracking error. This checks
+the input route and changing policy sensitivity; it does not establish successful
+velocity control. Evidence: `logs/velocity_initial_command_sensitivity.json`.
