@@ -99,6 +99,7 @@ def main():
                              full_clip=bool(horizon[i]==motion.clip_len[i]-1)))
         diagnostics=world_model_diagnostics(runner.alg.world_model,task,diagnostic_replay)
         result=dict(checkpoint=str(args.checkpoint.resolve()),iteration=ck['iter'],training_elapsed_s=ck['elapsed_s'],
+                    algorithm=ck['cfg']['algorithm']['class_name'],evaluation_device=args.device,evaluation_seed=0,
                     real_transitions=ck['real_transitions'],native_physics=True,auto_reset=False,domain_randomization=False,
                     mean_normalized_return=float(np.mean([r['normalized_return'] for r in rows])),
                     survived_fraction=float(np.mean([not r['failed'] for r in rows])),
