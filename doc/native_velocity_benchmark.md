@@ -184,3 +184,19 @@ model actor weight disabled. It isolates the model contribution from integration
 differences; its separate budget is 20 minutes. G1 uses exactly the same hybrid
 recipe for a 30-minute/3000-iteration transfer trial. These limits were fixed
 before the corresponding v3 policies trained.
+
+## Artifact generation
+
+After training has ended, `scripts/finalize_native_velocity.py` loads the first
+checkpoint passing every command, or the final evaluated checkpoint when none
+passes. It records this selection explicitly, evaluates in native physical
+simulation again, saves raw trajectories, renders method-labelled videos and
+produces the primary comparison plots. Its optional `--wait-pid` waits for the
+confirmed matrix process before using the GPU. G1 is a fresh same-config task
+test, not zero-shot weight transfer. No video joint smoothing is applied.
+
+`process_elapsed_s` in timing manifests is recorded before W&B shutdown and
+environment cleanup. Matrix `process_s` includes the full child process where
+available. Neither should be silently substituted for the other in a cost
+ledger. Online curve points measure actual elapsed time at evaluation result
+availability; `active_process_s` subtracts accumulated online evaluation work.
