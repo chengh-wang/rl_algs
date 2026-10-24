@@ -4,6 +4,8 @@ Independent PyTorch package for **MBDAC** (model-based differentiable actor-crit
 
 Version 0.3 adds **MBDACFastSAC**: the pinned Holosoma FastSAC numerical actor/Q modules, real-only distributional Q fitting, and a short entropy-regularized world-model actor rollout. It is a model-based extension of **Holosoma FastSAC**, not the separate FlashSAC paper implementation. Existing MBDAC/MBDACAMP algorithms and checkpoints remain independent. Early 0.2 FastSAC prototypes omitted Q controller memory and are retained as debugging evidence, not valid method comparisons.
 
+The first corrected FastSAC+WM pilot completed 2000 updates but **did not learn full motion tracking**: the final policy triggers failure at 2.12 seconds of a 6-second reference. Numerical/interface validation below does not establish policy quality or a training speedup.
+
 Experimental implementation with completed native **MJLab** training and measured comparisons. G1 motion tracking and AMP velocity learning run in 1024 `ManagerBasedRlEnv` worlds; full updates, physical evaluations, resume and SDK-free actor export are verified. Velocity quality is mixed and does not establish an overall speedup at equal quality. Other simulator backends have adapter/smoke evidence only and were not used for the current training.
 
 ## Fresh installation (Linux, NVIDIA GPU)
@@ -91,7 +93,7 @@ Alternatively `--action-std-min 0.01 --action-std-max 0.2` declares exploration 
 
 For real transitions with stochastic/external command updates, adapters provide pre-reset `condition1`; real Q uses it directly. Deterministic motion clocks may use `task.advance` as the fallback. Imagined goals follow the task's explicit advance rule, independently of learned physical dynamics.
 
-Default schedule: initial 64 real steps; 500 WM-only outer iterations; then each outer iteration collects alternating 2/3 vector steps and performs **10 WM → 4 real Q/temperature/target updates with 2 actor updates interleaved**. This is a new hybrid schedule, not SuperMimic's 10:1:20 schedule or an unchanged Holosoma `learn()` loop. Q uses the original ensemble mean, distributional cross-entropy, tau 0.05, gamma 0.99, 501 atoms on [-20,20], source learning rates/AdamW decay and entropy target. Laptop Q batch is 256 instead of the source's 8192. Model actor gradients are clipped at norm 1 for BPTT. Symmetry/CNN/distributed training and n-step Q returns are not implemented by this adapter; this WBT example uses one-step Q returns, as does the pinned WBT preset.
+Default schedule: initial 64 real steps; 500 WM-only outer iterations; then each outer iteration collects alternating 2/3 vector steps and performs **10 WM → 4 real Q/temperature/target updates with 2 actor updates interleaved**. This is a new hybrid schedule, not SuperMimic's 10:1:20 schedule or an unchanged Holosoma `learn()` loop. Q uses the original ensemble mean, distributional cross-entropy, tau 0.05, gamma 0.99, 501 atoms on [-20,20], source learning rates/AdamW decay and entropy target. The default Q batch is 256; the measured pilot below explicitly uses the source's 8192, independently of the model actor's batch 256. Model actor gradients are clipped at norm 1 for BPTT. Symmetry/CNN/distributed training and n-step Q returns are not implemented by this adapter; this WBT example uses one-step Q returns, as does the pinned WBT preset.
 
 ```bash
 # Uses the same .venv and robot/motion assets as the existing G1 example.
@@ -111,10 +113,30 @@ Default schedule: initial 64 real steps; 500 WM-only outer iterations; then each
 .venv/bin/python -m examples.mjlab_g1.evaluate \
   logs/g1_wm_fastsac_v5/model_2000.pt \
   --motion-dir logs/g1_wm_fastsac_v5/motion --seconds 6 --video-seconds 6 \
+  --continue-after-failure \
   --output logs/g1_wm_fastsac_v5_eval_2000
 ```
 
 The subset records original/selected-file SHA256 and frame range; original data is never overwritten. `--start-seconds` selects another explicit window, `--critic-batch` changes only Q sampling volume, and `--wm-checkpoint` loads only a compatible native G1 physical model while leaving actor/Q/temperature fresh. `--wm-only-iters` sets its adaptation period. Report any previous WM training separately; a reused model is not a from-scratch speed result. Full resume checks the identical motion subset and algorithm recipe. Actor/Q math runs in FP32; the large WM uses the configured precision. Run length is an initial probe, not a convergence guarantee. Evaluate the actor in physical simulation and report WM fitting/collection/actor/Q costs together. New configs select `class_name="MBDACFastSAC"` through the same public runner. Full resume includes target Q, temperature/optimizer and update counters; actor-only inference/export needs no WM or simulator SDK. `load_cfg={"temperature": True}` selects a temperature warm start. Existing MBDAC checkpoints cannot directly initialize this different actor architecture.
+
+### Measured small pilot, 2026-10-24
+
+Run [uya7n6k7 on W&B](https://forge.coreweave.com/wandb/sslab_motion_mimic-teams/mbdac-fastsac-tracking/runs/uya7n6k7) used native MJLab 1.2.0 `ManagerBasedRlEnv`, 1024 worlds, one unchanged G1 LAFAN1 reference window (original seconds 4–10), seed 42, and the command above. Actor, Q and WM all started fresh. Training source was `c104eefc16e938517cd8abb5253244e0e16ea534`. The actor objective was explicitly **0.1 model / 0.9 real-state SAC**, with model horizon 3; this is not evidence for the default pure-model objective or an unchanged upstream recipe.
+
+Training took **1718.42 seconds (28 min 38 s)** including WM-only warmup and real collection; the whole process took 1740.37 seconds including initialization/log finalization. It collected 5,185,536 real transitions and checkpoint auditing confirmed 20,000 WM, 6,000 Q/temperature and 3,000 actor optimizer steps. A CPU evaluation of checkpoint 1000 ran during training, so this is a laptop trial timing rather than an isolated throughput benchmark.
+
+Both checkpoints below were evaluated on CUDA in native physics, from the same initial reference state with seed 0, no observation noise/domain randomization, and no automatic resets. Metrics stop at the first failure; the 6-second videos continue physical simulation and show a red failure banner. The left panel is kinematic reference playback; the right panel is the actual policy.
+
+| Checkpoint | Time until failure / 6 s | Joint RMSE before failure | Full tracking |
+| --- | --- | --- | --- |
+| 1500 | 1.02 s | 1.002 rad | Failed |
+| 2000 | 2.12 s | 0.769 rad | Failed |
+
+The final policy remains unusable for complete tracking. Reward/episode-length curves recover late in training but do not establish convergence; no equal-quality speed advantage over MBDAC or PPO is established. Earlier incomplete-Q debugging runs consumed a further 3024.01 process seconds (50 min 24 s); those are not valid method comparisons. Debug runs v2/v3 borrowed an existing WM, whose original training cost is recorded separately; this final run did not reuse it.
+
+Validation is separate from this unsuccessful policy result: 41 native-environment tests pass (one optional skip), and the installed wheel passes 40 tests without simulator SDKs (two optional skips). Checks include upstream H=0 actor loss/all-gradient equivalence, a complete C51 optimizer step, reset-safe noisy policy memory, previous-action Q state, frozen WM/Q parameters with live actor input gradients, update/resume semantics and legacy-checkpoint rejection. Native contract validation found zero policy-history reconstruction error and verified applied PD action/pre-reset physical transitions. Export of the actual final actor through `ModelBasedRunner.export_jit()` runs without MJLab/MuJoCo/Holosoma/RSL-RL; eager versus exported outputs match exactly for batches 1 and 16. These checks do not validate the learned policy's behavior.
+
+Local generated evidence (also uploaded to the W&B run): `logs/g1_wm_fastsac_v5_report/{summary.json,learning_curves.png}`, `logs/g1_wm_fastsac_v5_eval_{1500,2000}/{metrics.json,reference_left_policy_right.mp4}`, `logs/g1_wm_fastsac_v5_export/{policy.pt,audit.json}`, and `logs/fast_sac_native_contract.json`. These files are not required to install the wheel; checkpoints, data and generated logs remain outside source control.
 
 ## RSL-style use
 
