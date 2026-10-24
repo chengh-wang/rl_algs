@@ -203,6 +203,29 @@ produces the primary comparison plots. Its optional `--wait-pid` waits for the
 confirmed matrix process before using the GPU. G1 is a fresh same-config task
 test, not zero-shot weight transfer. No video joint smoothing is applied.
 
+## Retrospective checkpoint evaluation
+
+The original online records remain the primary record of when a result was
+actually observed. For a denser retrospective check, after GPU jobs end run:
+
+```bash
+.venv/bin/python scripts/refine_native_velocity.py \
+  logs/native_go1_mbdac_v3 logs/native_go1_fastsac_v2 \
+  logs/native_go1_wm_fastsac_v3 logs/native_go1_real_only_v3 \
+  --out logs/native_go1_refined_checkpoints
+```
+
+This evaluates ordinary saved checkpoints in chronological order until the
+first strict pass. It uses the exact logged real-transition counters; MBDAC's
+different UTD means checkpoint iterations are not equal sample counts. It does
+not interpolate an unsaved policy or assume learning is monotonic between
+samples. The retrospective time axis is TensorBoard's iteration event wall time
+minus the original process-start timestamp, an estimate of that logged
+iteration's readiness. It is distinct from original online result availability
+and from exact source checkpoint-save monotonic timestamps, which are retained
+separately. Actual offline evaluation costs are recorded in their own sessions.
+Checkpoint, config and evaluation-code hashes guard reuse after interruption.
+
 ## Integration differences checked against the pinned learner
 
 The upstream baseline inherits its complete training loop. The new runner's
