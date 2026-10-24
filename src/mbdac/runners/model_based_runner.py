@@ -1,5 +1,6 @@
 """RSL-RL-style public runner; real collection and imagined batches have independent sizes."""
 import copy
+from dataclasses import asdict
 import csv
 import json
 import math
@@ -39,6 +40,7 @@ class ModelBasedRunner:
         name=self.cfg.get('algorithm',{}).get('class_name','MBDAC').split(':')[-1]
         classes={'MBDAC':MBDAC,'MBDACAMP':MBDACAMP}
         self.alg=classes[name].construct_algorithm(env.get_observations(),env,self.cfg,device)
+        self.cfg['algorithm']={'class_name':name,**asdict(self.alg.cfg)}
         self.current_learning_iteration=0; self.real_transitions=0; self._step_acc=0.; self.elapsed_s=0.
         self._active_start=None
         self.log_dir=Path(log_dir) if log_dir else None

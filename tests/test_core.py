@@ -166,3 +166,20 @@ def test_physical_diagnostics_mask_resets_for_a_known_model():
     result=world_model_diagnostics(ExactModel(),env.model_task,alg.replay,window=3,batch=128)
     assert result['model/step_3_samples']>0
     assert result['model/one_step_state_rmse']==0 and result['model/step_3_state_rmse']<1e-6
+
+
+def test_optimizer_schedule_matches_reference_warmup_and_10_1_20_ratio():
+    env=ToyEnv(); cfg=config(); cfg.wm_batches=10; cfg.wm_only_iters=2
+    cfg.critic_epochs=5; cfg.critic_minibatches=4
+    alg=MBDAC(env.model_task,4,cfg); fill(alg,env)
+    calls=dict(wm=0,actor=0,critic=0); order=[]
+    for name,opt in [('wm',alg.opt_wm),('actor',alg.opt_actor),('critic',alg.opt_critic)]:
+        original=opt.step
+        def counted(*args,_name=name,_step=original,**kwargs):
+            calls[_name]+=1; order.append(_name); return _step(*args,**kwargs)
+        opt.step=counted
+    alg.update(0); alg.update(1)
+    assert calls==dict(wm=20,actor=0,critic=0)
+    order.clear(); alg.update(2)
+    assert calls==dict(wm=30,actor=1,critic=20)
+    assert order==['wm']*10+['actor']+['critic']*20

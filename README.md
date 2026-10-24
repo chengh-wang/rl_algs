@@ -75,6 +75,8 @@ Like RSL-RL, `load_cfg` selects a warm start: `runner.load(path, load_cfg={"acto
 
 The example preserves the reference's full network widths, 10-frame observation history, 8-step world-model fitting, 32-step actor horizon, learning rate, lambda-return critic and analytic task formulas. Laptop defaults use 1024 real environments, world-model batches of 128, actor batches of 256, and 256 replay time steps, rather than the reference's 4096 / 2048 / 4096 / 1000. These affect performance and must be reported in comparisons. Policy actions are clipped consistently in real and imagined rollouts. `--compile` optionally compiles model/analytic heads; the initial numerical validation used eager execution.
 
+See the [update schedule audit](doc/update_schedule_audit.md) for the exact 10 WM / 1 actor / 20 critic optimizer steps per iteration, UTD definition, and the reference repository's additional 500-iteration warmup.
+
 The observed velocity baseline used a different task, AMP+PPO and hardware load. Timing a few tracking updates does not establish an advantage over that baseline. A matched velocity-task comparison is a later acceptance item.
 
 ## Design contract

@@ -4,7 +4,7 @@ Hardware: RTX 4070 Laptop, 8 GiB. Isolated environment: Python 3.11.16, PyTorch 
 
 ## Numerical and interface checks
 
-- Fourteen CPU tests passed: terminal lambda-return targets; gradient through frozen world model without changing its weights; no replay windows across reset; empty-replay checkpoint resume; inference isolation; discriminator update isolation; articulated SO(3) roundtrip gradients; reusable physical primitive outputs under different reward scales; duplicate state/head rejection; exported actor equivalence; periodic checkpoint training-time accounting; actor-only warm start; clearing stale replay on load; and physical prediction diagnostics with terminal masks.
+- Fifteen CPU tests passed: terminal lambda-return targets; gradient through frozen world model without changing its weights; no replay windows across reset; empty-replay checkpoint resume; inference isolation; discriminator update isolation; articulated SO(3) roundtrip gradients; reusable physical primitive outputs under different reward scales; duplicate state/head rejection; exported actor equivalence; periodic checkpoint training-time accounting; actor-only warm start; clearing stale replay on load; physical prediction diagnostics with terminal masks; and actual optimizer call counts/order during warmup and joint learning.
 - Native G1 `ManagerBasedRlEnv`: 16 randomized test states, compared against MuJoCo forward kinematics, including nontrivial root rotations and angular velocities.
 
 | Quantity | Maximum absolute error |
