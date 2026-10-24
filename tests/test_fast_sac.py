@@ -53,6 +53,26 @@ def test_real_q_warmup_can_finish_before_model_actor_starts():
         alg.update(4);assert alg.critic_updates==warmup+2 and alg.actor_updates==1
 
 
+def test_model_warmup_keeps_real_sac_updates_without_using_predicted_critic_inputs():
+    from test_core import ToyTask
+    env=ToyEnv();env.model_task=ToyTask();step=env.step
+    def wrapped(action):
+        obs,r,d,extras=step(action);tr=extras['model_transition']
+        tr['critic_features']=torch.cat((tr['s'],tr['condition'],tr['context']),-1)
+        tr['next_critic_features']=torch.cat((tr['s1'],tr['condition'],tr['context']),-1)
+        return obs,r,d,extras
+    env.step=wrapped;cfg=config();cfg.wm_only_iters=3
+    cfg.fast_sac.update(real_actor_during_wm_warmup=True,real_actor_batch=16,model_actor_weight=.1)
+    alg=MBDACFastSAC(env.model_task,4,cfg)
+    def forbidden(*args,**kwargs):raise RuntimeError('Model feature during real SAC warmup')
+    env.model_task.critic_features=forbidden;fill(alg,env)
+    log=alg.update(0)
+    assert alg.actor_updates==1 and alg.critic_updates==2 and log['model_actor_weight']==0.
+    assert 'real_actor_loss' in log and 'model_actor_loss' not in log
+    import pytest
+    with pytest.raises(RuntimeError,match='Model feature during real SAC warmup'):alg.update(3)
+
+
 def test_vendored_actor_critic_are_exact_pinned_source():
     from mbdac.vendor.holosoma import fast_sac
     path=Path(fast_sac.__file__)

@@ -12,7 +12,7 @@
 - 图包含相同固定评估的 return、XY 速度 RMSE、yaw rate RMSE 与 survival。
 - 原始阈值为 XY ≤ 0.20 m/s、yaw ≤ 0.30 rad/s；同时给更严格的逐指令阈值。
 - 五类固定指令，每次 20 秒，禁止物理 reset，单独显示前进、后退、侧移、转向和站立。
-- 两个连续评估达标且 return 变化 <5% 后停止；否则最多两小时 active process。
+- 两个连续评估逐指令达标且 return 变化 <5% 后停止；v3 正式比较每种方法最多一小时（不含评估）。
 - 记录实际未达标、崩溃和开发预实验；不把不同任务、预训练或更新次数当作公平加速。
 
 完整协议：[native_velocity_benchmark.md](../doc/native_velocity_benchmark.md)。
@@ -22,7 +22,7 @@
 1. 实际 Q 更新可直接接收成对的真实 critic features；想象 Q 才调用预测的物理 head。
 2. 可选 controlled critic 接口保留 previous action；旧任务接口继续兼容。
 3. BF16 / fused AdamW 为显式选项，默认 fp32 / 非 fused 保持旧 checkpoint 行为。
-4. Q 的 800 次预训练可放在 WM-only 阶段最后 100 个 iteration 中；actor 仍在 WM warmup 后启用。
+4. 保留原 model-only 配方；新的 hybrid 配方在 WM warmup 期间先进行真实 SAC 更新，之后混入模型梯度。
 5. 标量日志统一打包再读回 CPU，并保存 simulator 可变 tensor 的快照。
 6. FK 根据传感器所需的树路径裁剪分支，支持两种机器人和固定 link / 非零关节 anchor。
 
@@ -51,8 +51,13 @@
   `3d05202c49c7da8f065daa42fcddbbe52720035ea4dd273bc4c880e5aa4991f6`。
   3010 步的第一次训练后评估已逐指令达标，active process 309.97 s；6060 步稳定达标后结束，
   过程总计 641.41 s（含评估）。[W&B](https://forge.coreweave.com/wandb/sslab_motion_mimic-teams/mbdac-native-velocity/runs/ujc6scu7)。
-- `native_go1_wm_fastsac_v2`：正在从零运行，使用真实 critic features 与通用优化。
-- 后续顺序运行 `native_go1_mbdac_v2`，再进行 `native_g1_wm_fastsac_v2` 迁移实验。
+- `native_go1_wm_fastsac_v2`：旧 model-only 预实验约 16 分钟仍主要站立，停止并保留原始日志。
+- 修正世界坐标系力 head 所需的 yaw 信息后，正式运行 `native_go1_mbdac_v3`；
+  检查到约 36 分钟时 XY RMSE 为 0.427 m/s、yaw 为 0.036 rad/s，40 个评估世界全部存活，尚未达标。
+- 随后顺序运行 `native_go1_wm_fastsac_v3`、同接口的 `native_go1_real_only_v3` 对照，
+  以及 `native_g1_wm_fastsac_v3`。所有网络、replay 与 normalization 从零初始化。
+- v3 hybrid 使用与原版相同的 3e-4 actor LR；WM warmup 后使用 0.9 真实 SAC + 0.1 模型 H=8 梯度。
+  主比较仍是完整算法配方的比较，不能把差异全部归因于 WM。
 
 `scripts/native_velocity_matrix.py` 负责顺序执行与记录，防止同时训练争用显卡。
 它不覆盖已有 trial。每轮保存实际 source snapshot，最终从评估 JSONL 生成图。

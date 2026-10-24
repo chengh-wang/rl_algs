@@ -234,7 +234,7 @@ The completed 5000 run improves gait and backward tracking, with mixed forward
 quality; lateral/turning remain weak. Body and native torso-reward-frame errors
 are separate. See [final delivery and comparison](doc/final_report_2026-10-24.md).
 
-## Native velocity experiments (0.3.2)
+## Native velocity experiments (0.3.3)
 
 Use the existing MJLab environment; the baseline setup installs only the
 original Holosoma learner and its imported dependencies, without replacing
@@ -246,9 +246,9 @@ bash scripts/setup_native_velocity_baseline.sh
 .venv/bin/python scripts/native_velocity_matrix.py
 ```
 
-The matrix then runs WM+FastSAC, MBDAC, and a G1 transfer trial sequentially,
+The matrix runs MBDAC, WM+FastSAC, a WM-disabled control and a G1 transfer trial sequentially,
 with W&B logs and shared physical evaluations. It refuses to overwrite existing
-trials. Each primary method has a two-hour active-process budget and can stop
+trials. Each model-based primary method has a one-hour active-process budget and can stop
 earlier after stable acceptance. Evaluation reward/RMSE plots use actual elapsed
 time and real transitions; iteration counts are not equated across algorithms.
 
@@ -258,6 +258,12 @@ WM warmup, and batched scalar logging. Real contact measurements are preserved
 for real Q fitting; imagined Q still uses physical model heads. The native task
 factories and reward weights are not tuned for the algorithm. See the protocol
 and explicit approximation/recipe differences below before claiming a speedup.
+
+Version 0.3.3 adds opt-in real actor updates during WM warmup and retains heading
+information for world-frame physical heads. The frozen hybrid uses 0.9 real SAC
+and 0.1 model-return actor gradients after warmup. A matching WM-disabled control
+separates integration differences from the model contribution. These settings
+are explicit recipes; defaults and earlier checkpoints remain compatible.
 
 ## Design contract
 

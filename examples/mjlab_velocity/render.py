@@ -18,7 +18,7 @@ def main():
     p.add_argument('--world',type=int,default=8,help='World 8 is the first +0.8 m/s command replica')
     args=p.parse_args();trajectory=np.load(args.trajectory)
     scene=Scene(velocity_cfg(args.robot,1,evaluation=True).scene,device='cpu')
-    model=scene.compile().compile();data=mujoco.MjData(model)
+    model=scene.compile();data=mujoco.MjData(model)
     renderer=mujoco.Renderer(model,height=480,width=800)
     camera=mujoco.MjvCamera();camera.distance=2. if args.robot=='go1' else 3.;camera.elevation=-16;camera.azimuth=135
     dt=float(trajectory['dt']);world=args.world;origin=trajectory['env_origins'][world];command=trajectory['command'][world]

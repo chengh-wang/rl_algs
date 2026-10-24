@@ -1,6 +1,6 @@
 # Native velocity benchmark (2026-10-24)
 
-Status: controlled v2 runs in progress; no WM speedup result yet.
+Status: controlled v3 runs in progress; no WM speedup result yet.
 
 Goal: improve simulator-independent WM+Holosoma FastSAC, test native MJLab G1
 and Go1 velocity tasks, and compare MBDAC / upstream Holosoma FastSAC /
@@ -31,7 +31,7 @@ Compare first evaluated checkpoint meeting both gates, with sampling intervals
 and actual wall-clock times. Record process startup, compile, data collection,
 WM fitting, actor/Q/V fitting, warmup, evaluation and total elapsed separately.
 If a method never reaches the gate, report not reached, not a speedup. Initial
-per-method training budget: two wall-clock hours; pause earlier for non-finite
+v3 per-method primary training budget: one active-process hour; pause earlier for non-finite
 updates or clear physical/learning collapse, preserve and diagnose failures.
 One seed is a laptop pilot, not a statistically established superiority claim.
 Stop early after two consecutive 300 s evaluations meet the stricter per-command
@@ -43,7 +43,9 @@ Requested plots: reward versus wall-clock time and each velocity RMSE versus
 wall-clock time, all three methods on common axes. Plot identical deterministic
 evaluation returns as the primary reward comparison, with native training
 episodic reward separately (its distribution changes with policy and curriculum).
-Include process elapsed and training-only elapsed versions; never relabel the
+Include total process elapsed and elapsed excluding evaluation versions; the
+latter still includes imports, setup, compilation, diagnostics and checkpoint
+I/O, so it is not pure learner time. Never relabel the
 number of updates or simulated seconds as real elapsed time. Keep raw JSON/CSV,
 checkpoint timestamps, native task/config hashes and method settings alongside
 the figures. Evaluation points are discrete; report the first observed crossing
@@ -85,6 +87,11 @@ formula parity must not be described as exact physical reward prediction. Real
 collection and evaluation always use actual unchanged native reward managers.
 Commands are held over short imagined horizons; real heading updates, resampling
 and pushes remain native. Contact predicates are softened only in imagination.
+
+### Historical model-only v2 recipe (not the primary v3 hybrid)
+
+The next three paragraphs document the earlier recipe. The frozen v3 settings
+below supersede its WM update count, actor learning rate, warmup and replay size.
 
 All actors receive the native single-frame actor observation; commands are also
 passed as the existing model-based goal input (same information). MBDAC uses its
@@ -141,3 +148,39 @@ Generic scalar logging now packs detached native measurements before host
 conversion, preserving mutable simulator-buffer snapshots and Python-float log
 interfaces. Tests show collection replay and normalizer buffers are unchanged.
 No robot name, reward target or task threshold appears in these core changes.
+
+## Frozen v3 comparison
+
+The source baseline remains `native_go1_fastsac_v2`; its original algorithm and
+native observations/rewards are unaffected by the model feature changes below.
+The model-based primary runs are `native_go1_mbdac_v3` and
+`native_go1_wm_fastsac_v3`. Earlier model-only v2 runs remain development trials,
+not silently omitted successes or definitive convergence failures.
+
+The native velocity codec retains world yaw for physical world-force heads. The
+previous yaw-invariant feature map could not identify rotated world forces from
+otherwise identical body states. Local dynamics targets remain equivariant;
+tests verify both properties. The same correction is applied to both model-based
+methods and both robots. Real physics, native force sensors, rewards and command
+distributions are unchanged.
+
+The v3 hybrid retains large-batch real actor updates during model warmup. It uses
+the source 3e-4 actor LR, source exploration log-std bounds and 8192 real actor/Q
+batches. It collects one vector step per iteration, fits one WM batch of 128
+8-step windows, fits eight real Q batches, and updates the actor every four Q
+steps. Replay capacity is 1024 time rows and initial collection is 11 rows.
+Before iteration500 the actor uses real SAC alone. Thereafter its objective is
+0.9 real SAC + 0.1 differentiable 8-step model return (model actor batch256).
+There is no teacher/checkpoint warm start and no task-specific recipe branch.
+
+MBDAC retains its reference 10 WM batches, 32-step actor, V/lambda-return update,
+500-iteration warmup and other original settings listed above. Source FastSAC
+retains its pinned original loop. Therefore this is a comparison of complete
+method recipes, not a claim that all neural architectures/optimizers are equal.
+
+An additional `native_go1_real_only_v3` control uses the same new runner, policy,
+Q, normalization, replay and native adapter as the hybrid, with WM fitting and
+model actor weight disabled. It isolates the model contribution from integration
+differences; its separate budget is 20 minutes. G1 uses exactly the same hybrid
+recipe for a 30-minute/3000-iteration transfer trial. These limits were fixed
+before the corresponding v3 policies trained.

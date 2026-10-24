@@ -20,11 +20,17 @@ class VelocityCodec(ArticulatedCodec):
         super().__init__(joints)
         self.physical_dim = self.state_dim; self.memory_dim = 2*feet
         self.state_dim += self.memory_dim; self.feature_dim += self.memory_dim
+        # Native contact forces are world-frame vectors. Retain world yaw for
+        # their physical heads instead of giving them only yaw-invariant inputs.
+        self.feature_dim += 2
         self.delta_dim += self.memory_dim
         self.error_floor = torch.cat((self.error_floor, torch.full((feet,), .003), torch.full((feet,), .02)))
 
     def unpack(self, s): return super().unpack(s[...,:self.physical_dim])
-    def features(self, s): return torch.cat((super().features(s), s[...,self.physical_dim:]), -1)
+    def features(self, s):
+        R=self.unpack(s)[1];heading=R[..., :2,0]
+        heading=heading/heading.norm(dim=-1,keepdim=True).clamp_min(1e-6)
+        return torch.cat((super().features(s),s[...,self.physical_dim:],heading),-1)
     def targets(self, s, s1):
         return torch.cat((super().targets(s,s1),s1[...,self.physical_dim:]-s[...,self.physical_dim:]),-1)
     def integrate(self, s, d):

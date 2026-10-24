@@ -53,8 +53,9 @@ class BenchmarkRunner(ModelBasedRunner):
 
 
 def training_config(task,args):
+    horizon=args.horizon if args.horizon is not None else (8 if args.method=='wm_fastsac' and args.recipe!='model_only' else 32)
     algorithm=dict(class_name='MBDAC' if args.method=='mbdac' else 'MBDACFastSAC',
-        history=1,horizon=args.horizon,compile=args.compile,compile_task=False,
+        history=1,horizon=horizon,compile=args.compile,compile_task=False,
         wm_batch=128,pi_batch=256,wm_only_iters=500,buffer_steps=256,
         action_clip=max(20.,float(task.action_bounds.max())))
     if args.method=='wm_fastsac':
@@ -64,17 +65,25 @@ def training_config(task,args):
             num_atoms=101,tau=.125,critic_updates=8,policy_frequency=4,target_entropy_ratio=0.,
             pretrain_critic_during_wm_warmup=True)
         algorithm['gamma']=.97
+        if args.recipe!='model_only':
+            algorithm.update(utd=1.,wm_batches=1,warmup_steps=11,buffer_steps=1024)
+            algorithm['fast_sac'].update(actor_lr=3e-4,critic_warmup_updates=0,
+                action_std_min=None,action_std_max=None,real_actor_batch=8192,model_actor_weight=.1,
+                pretrain_critic_during_wm_warmup=False,real_actor_during_wm_warmup=True)
+            if args.recipe=='real_only':
+                algorithm.update(wm_batches=0,wm_only_iters=0)
+                algorithm['fast_sac']['model_actor_weight']=0.
     if args.smoke:
-        algorithm.update(wm_only_iters=0,warmup_steps=8,wm_batches=1,wm_window=4,
+        algorithm.update(wm_only_iters=0,warmup_steps=8,wm_batches=0 if args.method=='wm_fastsac' and args.recipe=='real_only' else 1,wm_window=4,
             buffer_steps=16,wm_hidden=(128,128),wm_batch=16,pi_batch=16,
             actor_hidden=(128,64),critic_hidden=(64,64),critic_epochs=1,critic_minibatches=1,precision='fp32')
         if args.method=='wm_fastsac':
             algorithm['fast_sac'].update(actor_hidden_dim=64,critic_hidden_dim=64,num_atoms=51,critic_batch=32,
-                critic_updates=2,critic_warmup_updates=0,precision='fp32',fused_optimizers=False)
+                critic_updates=2,critic_warmup_updates=0,precision='fp32',fused_optimizers=False,real_actor_batch=32)
     return dict(algorithm=algorithm,logger=args.logger,wandb_project='mbdac-native-velocity',batch_scalar_logging=True,
         run_name=args.log_dir.name,save_interval=args.save_interval,log_interval=1 if args.smoke else 10,
         task=f'native_mjlab_{args.robot}_flat_velocity',robot=args.robot,seed=args.seed,num_envs=args.num_envs,
-        initialized_from='scratch',physics_dt=task.env.physics_dt,control_dt=task.dt,
+        initialized_from='scratch',recipe=args.recipe if args.method=='wm_fastsac' else 'original',physics_dt=task.env.physics_dt,control_dt=task.dt,
         evaluation_protocol='doc/native_velocity_benchmark.md',actor_history_frames=1,max_train_seconds=args.max_train_seconds)
 
 
@@ -84,7 +93,8 @@ def main():
     p.add_argument('--robot',choices=('g1','go1'),default='go1')
     p.add_argument('--method',choices=('mbdac','fastsac','wm_fastsac'),default='wm_fastsac')
     p.add_argument('--num-envs',type=int,default=1024);p.add_argument('--iterations',type=int,default=5000)
-    p.add_argument('--horizon',type=int,default=32);p.add_argument('--seed',type=int,default=42)
+    p.add_argument('--horizon',type=int);p.add_argument('--seed',type=int,default=42)
+    p.add_argument('--recipe',choices=('hybrid','model_only','real_only'),default='hybrid')
     p.add_argument('--save-interval',type=int,default=250);p.add_argument('--compile',action='store_true')
     p.add_argument('--max-train-seconds',type=float,default=7200.,help='Active process budget, excluding evaluation')
     p.add_argument('--logger',choices=('wandb','tensorboard'),default='wandb')

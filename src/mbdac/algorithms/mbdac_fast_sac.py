@@ -21,7 +21,7 @@ FAST_SAC_DEFAULTS=dict(actor_hidden_dim=512,critic_hidden_dim=768,num_atoms=501,
     weight_decay=.001,alpha_weight_decay=.01,model_actor_weight=1.,
     action_std_min=None,action_std_max=None,real_actor_batch=None,
     critic_warmup_updates=0,precision='fp32',fused_optimizers=False,
-    pretrain_critic_during_wm_warmup=False)
+    pretrain_critic_during_wm_warmup=False,real_actor_during_wm_warmup=False)
 
 
 @dataclass
@@ -228,20 +228,25 @@ class MBDACFastSAC(MBDAC):
             imagined_bootstrap=float(bootstrap.detach().mean()),
             imagined_survival=float(alive.detach().mean()),entropy=float(torch.stack(entropies).detach().mean()))
 
-    def update_actor(self):
-        start,h=self._sample_starts()
+    def update_actor(self, model_weight=None):
+        weight=self.cfg.fast_sac['model_actor_weight'] if model_weight is None else model_weight
+        if not 0<=weight<=1:raise ValueError('Actor model weight must be in [0,1]')
+        real_only=weight==0 and self.cfg.horizon>0
+        if real_only:
+            batch=self.cfg.fast_sac['real_actor_batch'] or self.cfg.pi_batch
+            start,h=self._sample_replay_starts(batch,self.cfg.history)
+        else:start,h=self._sample_starts()
         with torch.no_grad(): history=self._history(h)
         self.opt_wm.zero_grad(set_to_none=True); self.opt_critic.zero_grad(set_to_none=True)
         self.opt_alpha.zero_grad(set_to_none=True)
         with frozen(self.world_model,self.critic):
-            weight=self.cfg.fast_sac['model_actor_weight']
             logs={}
             if weight>0 or self.cfg.horizon==0:
                 objective,logs=self.actor_objective(start,history)
                 logs['model_actor_loss']=float(-objective.detach())
             if weight<1 and self.cfg.horizon>0:
                 real_start,real_history=start,history
-                if self.cfg.fast_sac['real_actor_batch'] is not None:
+                if self.cfg.fast_sac['real_actor_batch'] is not None and not real_only:
                     with torch.no_grad():
                         real_start,rows=self._sample_replay_starts(self.cfg.fast_sac['real_actor_batch'],self.cfg.history)
                         real_history=self._history(rows)
@@ -261,14 +266,14 @@ class MBDACFastSAC(MBDAC):
         self.actor_updates+=1
         return {**logs,'actor_loss':float(loss.detach()),'actor_grad_norm':float(norm),'model_actor_weight':weight}
 
-    def update_actor_critic(self, enable_actor=True, critic_steps=None):
+    def update_actor_critic(self, enable_actor=True, critic_steps=None, actor_model_weight=None):
         """Common learner entry point, using real Q fits and model policy steps."""
         c=self.cfg;rows=[]
         for _ in range(c.fast_sac['critic_updates'] if critic_steps is None else critic_steps):
             row=self.update_real_critic()
             if (enable_actor and self.critic_updates>c.fast_sac['critic_warmup_updates'] and
                     self.critic_updates%c.fast_sac['policy_frequency']==0):
-                row.update(self.update_actor())
+                row.update(self.update_actor(model_weight=actor_model_weight))
             rows.append(row)
         return {key:sum(r[key] for r in rows if key in r)/sum(key in r for r in rows)
                 for key in set().union(*(r.keys() for r in rows))}
@@ -282,6 +287,11 @@ class MBDACFastSAC(MBDAC):
             for k,v in self.update_world_model().items(): logs[k]=logs.get(k,0.)+v/c.wm_batches
         if iteration>=c.wm_only_iters:
             logs.update(self.update_actor_critic())
+        elif c.fast_sac['real_actor_during_wm_warmup']:
+            # Real SAC gradients do not require a trusted WM. Keep the original
+            # real-data learning path active while fitting dynamics, then add
+            # the configured model gradient after the model warmup threshold.
+            logs.update(self.update_actor_critic(actor_model_weight=0.))
         elif c.fast_sac['pretrain_critic_during_wm_warmup']:
             # Real C51 does not depend on differentiable model accuracy. Fit its
             # configured warmup during the last WM-only updates, without enabling
