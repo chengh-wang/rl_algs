@@ -27,6 +27,19 @@ bash scripts/setup_amp_benchmark.sh /path/to/AMP_mjlab
 
 The example's `.venv-amp` contains the upstream RSL fork and its supplied MJLab observation-manager patch, as the baseline requires. The main `.venv`, the old experiment's environment, host CUDA driver, and upstream tracked source files are unchanged. Installing a shared package through its normal editable installer does not require `sys.path` injection.
 
+There is one deliberate dependency-metadata exception in this isolated example:
+MJLab 1.2.0 declares `rsl-rl-lib==5.0.1`, whereas the upstream AMP fork reports
+`rsl-rl-lib==2.3.1` and supplies its own configuration migration. Consequently
+`uv pip check --python .venv-amp/bin/python` reports this one incompatibility.
+The setup script installs the pinned fork with `--no-deps`; the actual task,
+gradient updates and checkpoint evaluations have been tested with that combination.
+This exception is confined to `.venv-amp`. The standalone core does not require
+RSL-RL, and the main MJLab lock retains its official 5.0.1 dependency. Rerun the
+example setup script after changing its dependencies; a general dependency
+resolver can replace the AMP fork with the official package, which lacks this
+fork's expert loader and runner. No package version is relabeled to hide the
+exception.
+
 For this velocity task, `--compile` compiles WM dynamics while leaving analytic task heads in ordinary Torch autograd (`compile_task=false`). Compiling the full contact/FK reward backward triggered a Triton 3.6 `PassManager::run failed` on the tested PyTorch 2.10 laptop setup. This changes execution strategy, not the reward or model. `--compile-task` opts into compiling those heads on a compatible stack. The failed attempt and its saved warmup checkpoint are preserved.
 
 For timing a resumed experiment, record `started_unix`, `source_commit`, and

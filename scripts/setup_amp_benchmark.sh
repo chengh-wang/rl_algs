@@ -22,6 +22,7 @@ uv pip install --python "$AMP_PYTHON" -r "$MBDAC_ROOT/requirements-mjlab.lock.tx
 uv pip install --python "$AMP_PYTHON" --no-deps -e "$AMP_SOURCE" -e "$AMP_SOURCE/rsl_rl" -e "$MBDAC_ROOT"
 "$AMP_PYTHON" - "$AMP_SOURCE" <<'PY'
 from pathlib import Path
+import importlib.metadata
 import shutil
 import sys
 import mjlab
@@ -31,4 +32,6 @@ backup=target.with_suffix('.py.upstream-original')
 if not backup.exists(): shutil.copyfile(target,backup)
 shutil.copyfile(source,target)
 print('Applied the upstream observation patch only to the isolated benchmark environment.')
+print('Pinned AMP RSL fork:',importlib.metadata.version('rsl-rl-lib'))
+print('This isolated example overrides MJLab\'s rsl-rl-lib==5.0.1 metadata; see doc/velocity_benchmark.md.')
 PY
