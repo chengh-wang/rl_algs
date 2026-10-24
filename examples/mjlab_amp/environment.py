@@ -9,12 +9,9 @@ from mbdac.utils.rotations import quat_to_mat
 
 def capture_transition(env):
     if env._pending is not None:
-        robot=env.scene['robot']; feet=env.scene['feet_ground_contact'].data
-        history=env.scene['self_collision'].data.force_history
-        env._captured=dict(s1=env.physical_state().clone(),condition_reward=env.condition(reward_phase=True),
-            **{'primitive/joint_acceleration':robot.data.joint_acc.clone(),
-               'primitive/foot_contact':(feet.found>0).float().reshape(env.num_envs,-1).clone(),
-               'primitive/self_contact_force_history':history.reshape(env.num_envs,-1).clone()})
+        robot=env.scene['robot']; task=env.model_task
+        labels=task.signals.capture(env,task.physical_dependencies) if task is not None else {}
+        env._captured=dict(s1=env.physical_state().clone(),condition_reward=env.condition(reward_phase=True),**labels)
         if env.audit_snapshots:
             names=['body_link_pos_w','body_link_quat_w','body_link_lin_vel_w','body_link_ang_vel_w',
                    'site_lin_vel_w','joint_pos','joint_vel','joint_acc','soft_joint_pos_limits','default_root_state']

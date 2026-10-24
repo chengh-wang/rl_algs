@@ -87,6 +87,8 @@ The example preserves the reference's full network widths, 10-frame observation 
 
 See the [update schedule audit](doc/update_schedule_audit.md) for the exact 10 WM / 1 actor / 20 critic optimizer steps per iteration, UTD definition, and the reference repository's additional 500-iteration warmup.
 
+The [MBDAC review](doc/mbdac_audit_2026-10-24.md) records numerical equivalence, replay-resume fixes, trained-policy export and measured optimization. For new task rewards, [PhysicalSignals](doc/general_task_interface.md) selects analytic quantities first and automatically declares/captures missing physical heads.
+
 The observed velocity baseline used a different task, AMP+PPO and hardware load. Timing a few tracking updates does not establish an advantage over that baseline. The [matched velocity benchmark](doc/velocity_benchmark.md) reuses the retained baseline's native MJLab task and expert loader; native learning quality and speed comparisons remain acceptance items. See [current measured progress](doc/progress_2026-10-24.md).
 
 ## Design contract

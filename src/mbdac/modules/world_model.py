@@ -28,12 +28,14 @@ class WorldModel(nn.Module):
         return torch.cat((self.codec.features(state),context),-1)
 
     def primitives(self, state, context):
+        if not self.primitive_heads.specs: return {}
         return self.primitive_heads(self.primitive_inputs(state,context))
 
     def transition_inputs(self,state,action,next_state,context):
         return torch.cat((self.codec.features(state),action,self.codec.features(next_state),context),-1)
 
     def transition_primitives(self,state,action,next_state,context):
+        if not self.transition_heads.specs: return {}
         return self.transition_heads(self.transition_inputs(state,action,next_state,context))
 
     def _load_from_state_dict(self,state_dict,prefix,local_metadata,strict,missing_keys,unexpected_keys,error_msgs):

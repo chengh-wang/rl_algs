@@ -104,8 +104,10 @@ class MBDAC:
         self.world_model.input_norm.update(self.world_model.inputs(tr['s'],tr['a'],ctx))
         self.world_model.output_norm.update(self.task.codec.targets(tr['s'],tr['s1']))
         labels={k.split('/',1)[1]:v for k,v in tr.items() if k.startswith('primitive/')}
-        self.world_model.primitive_heads.update_normalization(labels,self.world_model.primitive_inputs(tr['s1'],ctx))
-        self.world_model.transition_heads.update_normalization(labels,self.world_model.transition_inputs(tr['s'],tr['a'],tr['s1'],ctx))
+        if self.world_model.primitive_heads.specs:
+            self.world_model.primitive_heads.update_normalization(labels,self.world_model.primitive_inputs(tr['s1'],ctx))
+        if self.world_model.transition_heads.specs:
+            self.world_model.transition_heads.update_normalization(labels,self.world_model.transition_inputs(tr['s'],tr['a'],tr['s1'],ctx))
         self.fresh=dones.bool().clone()
 
     def _wm_rollout(self, w):
@@ -123,11 +125,13 @@ class MBDAC:
         loss=(error*w['mask']).sum()/c.wm_batch
         # Primitive labels describe s1 before reset. Fit physical measurements on
         # real states, so a head cannot compensate for errors in predicted dynamics.
-        features=self.world_model.primitive_inputs(w['s1'],self.task.normalize_context(w['context']))
         labels={k.split('/',1)[1]:v for k,v in w.items() if k.startswith('primitive/')}
-        loss=loss+self.world_model.primitive_heads.loss(features,labels,w['mask'])
-        transition_features=self.world_model.transition_inputs(w['s'],w['a'],w['s1'],self.task.normalize_context(w['context']))
-        loss=loss+self.world_model.transition_heads.loss(transition_features,labels,w['mask'])
+        if self.world_model.primitive_heads.specs:
+            features=self.world_model.primitive_inputs(w['s1'],self.task.normalize_context(w['context']))
+            loss=loss+self.world_model.primitive_heads.loss(features,labels,w['mask'])
+        if self.world_model.transition_heads.specs:
+            transition_features=self.world_model.transition_inputs(w['s'],w['a'],w['s1'],self.task.normalize_context(w['context']))
+            loss=loss+self.world_model.transition_heads.loss(transition_features,labels,w['mask'])
         if not torch.isfinite(loss): raise FloatingPointError('World-model loss is non-finite')
         self.opt_wm.zero_grad(set_to_none=True); loss.backward()
         norm=nn.utils.clip_grad_norm_(self.world_model.parameters(),1.,error_if_nonfinite=True)
@@ -148,11 +152,13 @@ class MBDAC:
         raise RuntimeError('No sufficient valid imagination starts; check goal/clip boundaries')
 
     def _primitives(self, state, context):
+        if not self.world_model.primitive_heads.specs: return {}
         return self.world_model.primitives(state,self.task.normalize_context(context))
 
     def _reward(self, state, condition, action, previous, state0, context):
         primitives=self._primitives(state,context)
-        primitives.update(self.world_model.transition_primitives(state0,action,state,self.task.normalize_context(context)))
+        if self.world_model.transition_heads.specs:
+            primitives.update(self.world_model.transition_primitives(state0,action,state,self.task.normalize_context(context)))
         return self.task.reward(state,condition,action,previous,primitives=primitives,previous_state=state0)
 
     def _critic_features(self,state,condition,context):
@@ -217,8 +223,14 @@ class MBDAC:
         logs={}
         for _ in range(c.wm_batches):
             for k,v in self.update_world_model().items(): logs[k]=logs.get(k,0)+v/c.wm_batches
-        if iteration>=c.wm_only_iters: logs.update(self.update_actor_critic())
+        if iteration>=c.wm_only_iters:
+            logs.update(self.before_actor_update(iteration))
+            logs.update(self.update_actor_critic())
         return logs
+
+    def before_actor_update(self, iteration):
+        """Optional algorithm extension, after WM fitting and before actor BPTT."""
+        return {}
 
     def train_mode(self):
         for m in [self.actor,self.critic,self.world_model]: m.train()

@@ -22,7 +22,7 @@ class MBDACAMP(MBDAC):
     def __init__(self, task, num_envs, cfg=None, device='cpu'):
         super().__init__(task,num_envs,cfg,device)
         self.prior=AmpPrior(task.amp_feature_dim,self.cfg.amp.get('hidden',(1024,512,256))).to(device)
-        self.opt_prior=torch.optim.Adam(self.prior.parameters(),lr=self.cfg.lr)
+        self.opt_prior=torch.optim.Adam(self.prior.parameters(),lr=self.cfg.amp.get('lr',self.cfg.lr))
 
     def _reward(self, state, condition, action, previous, state0, context):
         task_reward=super()._reward(state,condition,action,previous,state0,context)
@@ -47,8 +47,13 @@ class MBDACAMP(MBDAC):
         nn.utils.clip_grad_norm_(self.prior.parameters(),1.,error_if_nonfinite=True); self.opt_prior.step()
         return {'amp_loss':float(loss.detach()),'amp_gradient_penalty':float(penalty.detach()),'amp_policy_score':float(dp.detach().mean()),'amp_expert_score':float(de.detach().mean())}
 
-    def update(self, iteration=0):
-        logs=self.update_prior(); logs.update(super().update(iteration)); return logs
+    def before_actor_update(self, iteration):
+        # Keep WM-only warmup genuinely WM-only. A discriminator trained for
+        # hundreds of steps against an unchanged actor can saturate its style
+        # reward before the actor has any opportunity to improve.
+        for group in self.opt_prior.param_groups:
+            group['lr']=self.cfg.amp.get('lr',self.learning_rate)
+        return self.update_prior()
 
     def save(self, include_replay=False):
         state=super().save(include_replay); state.update(prior=self.prior.state_dict(),opt_prior=self.opt_prior.state_dict()); return state

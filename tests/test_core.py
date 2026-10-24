@@ -82,7 +82,8 @@ def test_inference_does_not_change_training_mode_or_statistics():
     from dataclasses import asdict
     runner=ModelBasedRunner(ToyEnv(),{'algorithm':{'class_name':'MBDAC',**asdict(config())}})
     runner.alg.train_mode(); before=copy.deepcopy(runner.alg.actor.state_dict())
-    policy=runner.get_inference_policy('cpu'); policy(runner.env.get_observations())
+    policy=runner.get_inference_policy('cpu'); action=policy(runner.env.get_observations())
+    assert not action.requires_grad
     assert runner.alg.actor.training
     assert all(torch.equal(v,runner.alg.actor.state_dict()[k]) for k,v in before.items())
 
@@ -94,6 +95,40 @@ def test_amp_update_only_changes_discriminator():
     assert all(torch.equal(v,alg.actor.state_dict()[k]) for k,v in actor.items())
     assert all(torch.equal(v,alg.world_model.state_dict()[k]) for k,v in wm.items())
     alg.update_actor_critic()
+
+
+def test_amp_starts_after_wm_warmup_and_fits_prior_before_actor():
+    env=ToyEnv(); cfg=config(); cfg.wm_only_iters=2; cfg.amp={'hidden':(16,)}
+    alg=MBDACAMP(env.model_task,4,cfg); fill(alg,env)
+    initial=copy.deepcopy(alg.prior.state_dict()); order=[]
+    for name,opt in [('wm',alg.opt_wm),('prior',alg.opt_prior),('actor',alg.opt_actor),('critic',alg.opt_critic)]:
+        original=opt.step
+        def counted(*args,_name=name,_step=original,**kwargs):
+            order.append(_name); return _step(*args,**kwargs)
+        opt.step=counted
+    alg.update(0); alg.update(1)
+    assert order==['wm','wm']
+    assert all(torch.equal(v,alg.prior.state_dict()[k]) for k,v in initial.items())
+    order.clear(); alg.update(2)
+    assert order==['wm','prior','actor','critic']
+    assert alg.opt_prior.param_groups[0]['lr']==alg.learning_rate
+
+
+def test_amp_style_reward_reaches_actor_through_frozen_dynamics_and_prior():
+    class StyleTask(ToyTask):
+        def reward(self,s,c,a,prev,primitives=None,previous_state=None): return torch.zeros_like(s[:,0])
+        def termination_probability(self,s,c,primitives=None): return torch.zeros_like(s[:,0])
+    env=ToyEnv(); env.model_task=StyleTask(); cfg=config(); cfg.amp={'hidden':()}
+    alg=MBDACAMP(env.model_task,4,cfg); fill(alg,env); alg.update_world_model()
+    with torch.no_grad():
+        for p in alg.critic.parameters(): p.zero_()
+        alg.prior.net[-1].weight.fill_(.1); alg.prior.net[-1].bias.zero_()
+    before=copy.deepcopy(alg.prior.state_dict()); wm=copy.deepcopy(alg.world_model.state_dict())
+    logs=alg.update_actor_critic()
+    assert logs['actor_grad_norm']>0
+    assert all(torch.equal(v,alg.prior.state_dict()[k]) for k,v in before.items())
+    assert all(torch.equal(v,alg.world_model.state_dict()[k]) for k,v in wm.items())
+    assert all(p.grad is None for p in alg.prior.parameters())
 
 
 def test_articulated_codec_roundtrip_and_finite_gradients():
@@ -156,6 +191,32 @@ def test_loading_without_saved_replay_clears_existing_replay():
     env=ToyEnv(); alg=MBDAC(env.model_task,4,config()); fill(alg,env)
     checkpoint=copy.deepcopy(alg.save()); assert alg.replay.size>0
     alg.load(checkpoint); assert alg.replay.size==0
+
+
+def test_restored_replay_is_cut_before_new_simulator_collection(tmp_path):
+    from dataclasses import asdict
+    cfg={'algorithm':{'class_name':'MBDAC',**asdict(config())},'log_interval':1}
+    runner=ModelBasedRunner(ToyEnv(),cfg); runner.learn(1)
+    runner.save(tmp_path/'model.pt',include_replay=True)
+    resumed=ModelBasedRunner(ToyEnv(),cfg); resumed.load(tmp_path/'model.pt')
+    replay=resumed.alg.replay
+    last=replay._row(replay.size-1)
+    assert replay.data['truncated'][last].all()
+    resumed._collect(1)
+    windows=replay.sample_windows(512,3)
+    for i in range(1,3):
+        assert not torch.any((windows['mask'][:,i]>0)&windows['truncated'][:,:i].any(1))
+
+
+def test_history_honors_episode_boundary_with_a_stale_counter():
+    replay=ReplayBuffer(8,1,'cpu')
+    for index in range(6):
+        replay.add(dict(s=torch.tensor([[float(index)]]),ep_step=torch.tensor([100+index]),
+                        terminated=torch.tensor([False]),truncated=torch.tensor([index==3])))
+    starts,history=replay.sample_starts(512,4)
+    after=starts['s'][:,0]>=4
+    assert after.any()
+    assert (history['s'][after,:,0]>=4).all()
 
 
 def test_physical_diagnostics_mask_resets_for_a_known_model():

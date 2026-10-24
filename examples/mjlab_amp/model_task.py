@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import numpy as np
 import torch
 from mbdac.modules.codecs import ArticulatedCodec
-from mbdac.modules.primitives import PrimitiveSpec
+from mbdac.modules.primitives import PrimitiveSpec,PhysicalSignals
 from mbdac.utils.rotations import mat_to_quat
 from examples.mjlab_g1.kinematics import G1Kinematics
 from examples.mjlab_g1.model_task import G1ModelTask
@@ -35,9 +35,15 @@ class BaselineVelocityTask:
         self.site_body=torch.tensor([self.kin.body_names.index(m.body(int(m.site_bodyid[i])).name.removeprefix('robot/')) for i in sites],device=self.device)
         self.site_pos=torch.tensor(m.site_pos[sites],device=self.device,dtype=torch.float32)
         self.self_force_shape=tuple(env.scene['self_collision'].data.force_history.shape[1:])
-        self.primitive_specs=(PrimitiveSpec('joint_acceleration',29,'rad/s^2','joint',transition=True),
-            PrimitiveSpec('foot_contact',2,'probability','left/right foot',binary=True,transition=True),
-            PrimitiveSpec('self_contact_force_history',int(np.prod(self.self_force_shape)),'N','world; physics substep history',transition=True))
+        self.physical_dependencies=('joint_acceleration','foot_contact','self_contact_force_history')
+        self.signals=PhysicalSignals()
+        self.signals.register(PrimitiveSpec('joint_acceleration',29,'rad/s^2','joint',transition=True),
+                              measure=lambda e:e.scene['robot'].data.joint_acc)
+        self.signals.register(PrimitiveSpec('foot_contact',2,'probability','left/right foot',binary=True,transition=True),
+                              measure=lambda e:e.scene['feet_ground_contact'].data.found>0)
+        self.signals.register(PrimitiveSpec('self_contact_force_history',int(np.prod(self.self_force_shape)),'N','world; physics substep history',transition=True),
+                              measure=lambda e:e.scene['self_collision'].data.force_history)
+        self.primitive_specs=self.signals.learned_specs(self.physical_dependencies)
         self.reward_cfg={k:env.reward_manager.get_term_cfg(k) for k in env.reward_manager.active_terms if k!='_model_capture'}
         self.noise=torch.cat((torch.full((3,),.2),torch.full((3,),.05),torch.zeros(3),torch.full((29,),.01),
                               torch.full((29,),.5),torch.zeros(29))).to(self.device)

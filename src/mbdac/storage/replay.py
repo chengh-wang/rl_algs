@@ -39,9 +39,21 @@ class ReplayBuffer:
         env=torch.randint(self.num_envs,(batch,),device=self.device); row=self._row(age)
         back=torch.arange(history-1,-1,-1,device=self.device)[None]
         back=torch.minimum(torch.minimum(back,self.data['ep_step'][row,env,None].long()),age[:,None])
-        hr=self._row(age[:,None]-back)
+        ages=age[:,None]-back
+        if history>1:
+            hr=self._row(ages)
+            done=self.data['terminated'][hr,env[:,None]]|self.data['truncated'][hr,env[:,None]]
+            # Also honor collector/checkpoint cuts when ep_step is not reset.
+            boundary=done[:,:-1]&(ages[:,1:]>ages[:,:-1])
+            first=torch.where(boundary,ages[:,1:],0).amax(-1)
+            ages=torch.maximum(ages,first[:,None])
+        hr=self._row(ages)
         return ({k:v[row,env] for k,v in self.data.items()},
                 {k:v[hr,env[:,None]] for k,v in self.data.items()})
+
+    def mark_reset(self):
+        """End stored streams before resuming with a different simulator state."""
+        if self.size: self.data['truncated'][self._row(self.size-1)].fill_(True)
 
     def state_dict(self):
         # Store only initialized rows. Pointer preserves circular-buffer order.

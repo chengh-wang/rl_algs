@@ -20,6 +20,8 @@ critic_features(state, condition, context, primitives=None)
 
 `condition` can be a motion frame index, velocity command, or another task-specific tensor. Keep exogenous commands separate from physical state. Analytic functions must preserve gradients through their physical inputs. Imagined termination is a smooth probability; the real simulator can use hard thresholds. The task owns reward units and timestep scaling.
 
+The optional [physical-signal registry](general_task_interface.md) generates learned-head declarations and captures pre-reset measurement labels from registered dependencies. Analytic providers take precedence, and changing reward scales does not change these physical targets.
+
 The adapter accepts the **policy action** and owns its conversion to actual controls. `model_transition['a']` must be that same applied policy action, after any policy-action clipping. The task and world model must see a consistent action coordinate system. For G1, `q_target = q_default + calibration_bias + action_scale * a`; no reference joint targets are injected into this control path.
 
 ## Learn the physical quantity, not the reward
@@ -65,6 +67,8 @@ All values have leading dimension `num_envs`:
 Reward labels are useful diagnostics but are not reward-head supervision. Replay windows include the terminal transition and mask everything after it. History samples stay within their episode and available replay range.
 
 `model_boundary` optionally marks an exogenous change after the recorded physics/reward snapshot, such as a velocity push applied by an interval event. WM windows stop at that boundary; the next real transition starts from the actual perturbed state. Observation histories continue because the environment did not reset. Task advancement may use predicted `state` and `context` for state-dependent goal/termination bookkeeping.
+
+Restoring a checkpoint with replay marks its latest stored streams as truncated before new collection: checkpoint files do not contain simulator state. Historical physical transitions remain valid, but windows must not bridge the restored buffer to different live physics. Actor histories honor these cuts even when a caller's episode counter has not reset. `model_boundary` alone does not cut actor history.
 
 ## Framework adapters
 

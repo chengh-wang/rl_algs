@@ -22,6 +22,7 @@ class InferencePolicy(nn.Module):
         if dones is None: self.history=None; self.fresh=None
         else: self.fresh=dones.bool().clone()
 
+    @torch.no_grad()
     def forward(self, obs):
         o=obs['actor']
         if o.ndim==3: return self.actor(o,obs['goal'])
@@ -134,6 +135,9 @@ class ModelBasedRunner:
         state=torch.load(path,map_location=map_location or self.device,weights_only=False)
         if state.get('schema_version')!=1: raise ValueError('Unsupported checkpoint schema')
         load_iteration=self.alg.load(state,load_cfg,strict)
+        # Checkpoints contain learning state, not simulator state. Retain the
+        # last physical transition, but never join it to newly collected physics.
+        self.alg.replay.mark_reset()
         if load_iteration:
             self.current_learning_iteration=state['iter']; self.real_transitions=state['real_transitions']
             self.elapsed_s=state['elapsed_s']; self._step_acc=state['step_acc']
