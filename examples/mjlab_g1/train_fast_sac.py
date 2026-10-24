@@ -35,6 +35,13 @@ def prepare_motion(source, output, seconds, start_seconds=0.):
     return target
 
 
+def state_digest(module):
+    digest=hashlib.sha256()
+    for name,value in sorted(module.state_dict().items()):
+        digest.update(name.encode());digest.update(value.detach().cpu().contiguous().numpy().tobytes())
+    return digest.hexdigest()
+
+
 def main():
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--motion',type=Path,default=Path('data/lafan1_g1/walk1_subject1.csv'))
@@ -90,7 +97,16 @@ def main():
             saved=torch.load(args.wm_checkpoint,map_location='cpu',weights_only=False)
             if saved['cfg'].get('task') not in ('g1_lafan1_motion_tracking','g1_lafan1_single_clip_tracking'):
                 raise ValueError('WM warm start requires the same native G1 physical task')
+            actor_before=state_digest(runner.alg.actor);critic_before=state_digest(runner.alg.critic)
             runner.load(args.wm_checkpoint,load_cfg={'world_model':True})
+            wm=runner.alg.world_model.state_dict()
+            audit=dict(world_model_equal=all(torch.equal(wm[k].cpu(),v.cpu()) for k,v in saved['world_model'].items()),
+                actor_unchanged=actor_before==state_digest(runner.alg.actor),
+                critic_unchanged=critic_before==state_digest(runner.alg.critic),
+                fresh_wm_optimizer=not runner.alg.opt_wm.state,initial_iteration=runner.current_learning_iteration,
+                source_iteration=saved['iter'],source_training_s=saved['elapsed_s'])
+            assert audit['world_model_equal'] and audit['actor_unchanged'] and audit['critic_unchanged']
+            (args.log_dir/'initialization_audit.json').write_text(json.dumps(audit,indent=2)+'\n')
         runner.learn(args.iterations)
     finally: runner.close();env.close()
 
