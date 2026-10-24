@@ -99,15 +99,19 @@ Default schedule: initial 64 real steps; 500 WM-only outer iterations; then each
   --smoke --num-envs 1024 --iterations 3 --logger tensorboard \
   --log-dir logs/g1_wm_fastsac_smoke
 
-# Actual small policy: first 10 s of one unmodified reference, 1024 native worlds.
+# Small pilot: original reference seconds 4--10, all networks initialized fresh.
+# Model BPTT batch stays 256; the real-state SAC branch uses a larger batch.
 .venv/bin/python -m examples.mjlab_g1.train_fast_sac \
-  --num-envs 1024 --iterations 3000 --horizon 3 --compile \
-  --log-dir logs/g1_wm_fastsac_v1
+  --num-envs 1024 --iterations 2000 --horizon 3 --compile \
+  --critic-batch 8192 --real-actor-batch 8192 \
+  --start-seconds 4 --clip-seconds 6 --model-actor-weight 0.1 \
+  --action-std-min 0.01 --action-std-max 0.2 \
+  --log-dir logs/g1_wm_fastsac_v5
 
 .venv/bin/python -m examples.mjlab_g1.evaluate \
-  logs/g1_wm_fastsac_v1/model_3000.pt \
-  --motion-dir logs/g1_wm_fastsac_v1/motion --seconds 10 --video-seconds 10 \
-  --output logs/g1_wm_fastsac_eval_3000
+  logs/g1_wm_fastsac_v5/model_2000.pt \
+  --motion-dir logs/g1_wm_fastsac_v5/motion --seconds 6 --video-seconds 6 \
+  --output logs/g1_wm_fastsac_v5_eval_2000
 ```
 
 The subset records original/selected-file SHA256 and frame range; original data is never overwritten. `--start-seconds` selects another explicit window, `--critic-batch` changes only Q sampling volume, and `--wm-checkpoint` loads only a compatible native G1 physical model while leaving actor/Q/temperature fresh. `--wm-only-iters` sets its adaptation period. Report any previous WM training separately; a reused model is not a from-scratch speed result. Full resume checks the identical motion subset and algorithm recipe. Actor/Q math runs in FP32; the large WM uses the configured precision. Run length is an initial probe, not a convergence guarantee. Evaluate the actor in physical simulation and report WM fitting/collection/actor/Q costs together. New configs select `class_name="MBDACFastSAC"` through the same public runner. Full resume includes target Q, temperature/optimizer and update counters; actor-only inference/export needs no WM or simulator SDK. `load_cfg={"temperature": True}` selects a temperature warm start. Existing MBDAC checkpoints cannot directly initialize this different actor architecture.

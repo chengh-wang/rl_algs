@@ -7,7 +7,7 @@ name = "mbdac"
 version = "0.3.0"
 description = "Simulator-independent model-based differentiable actor-critic for robotics"
 requires-python = ">=3.10"
-license = "MIT"
+license = "MIT AND Apache-2.0"
 license-files = ["LICENSE", "licenses/*"]
 dependencies = ["torch>=2.6", "numpy>=1.24", "tensordict>=0.7", "tensorboard>=2.14"]
 
