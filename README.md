@@ -8,6 +8,16 @@ Implementation is in progress. The current training and acceptance work uses **M
 
 Use Python 3.11 and a working NVIDIA driver. The tested environment uses PyTorch 2.10.0 with its CUDA 12.8 runtime wheels; a separate CUDA toolkit installation is not required for this example. This creates an isolated environment and does not change existing Conda environments.
 
+If `uv` is absent, install it using the [official installer](https://docs.astral.sh/uv/getting-started/installation/), then install Python:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+. "$HOME/.local/bin/env"
+uv python install 3.11
+```
+
+The system needs `git`, a working NVIDIA driver (`nvidia-smi`), and EGL/OpenGL libraries for headless MuJoCo video rendering. Keep the existing driver; the locked Python dependencies supply the tested Torch/CUDA runtime and video encoder.
+
 ```bash
 # From this repository, with uv available:
 uv venv --python 3.11 .venv
