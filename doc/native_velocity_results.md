@@ -11,7 +11,7 @@ All networks, normalizers, optimizers and replay buffers start fresh.
 | --- | ---: | ---: | ---: | ---: | ---: |
 | Original Holosoma FastSAC | 309.97 s | 330.53 s | 0.04912 | 0.04988 | 3,083,264 |
 | Original MBDAC | 2451.07 s | 2544.83 s | 0.05246 | 0.04611 | 9,076,736 |
-| WM + FastSAC hybrid | Running; not yet passed | — | — | — | — |
+| WM + FastSAC hybrid | 914.48 s | 955.46 s | 0.07986 | 0.07416 | 2,212,864 |
 
 All thresholds must pass separately for every command and all 40
 nominal worlds must survive. Both completed methods pass again at the next
@@ -25,10 +25,14 @@ excluding evaluation includes imports, setup, compilation, diagnostics and
 checkpoint I/O. Full elapsed at result availability is recorded separately.
 The source baseline is pinned to Holosoma commit `d18d6cc50f872c15e904a22ceac22313cec955c8`.
 
-The hybrid's first training evaluation (311.65 active seconds, update870) has
-XY RMSE0.47737 m/s, yaw RMSE0.21896 rad/s and survival1.0. It is standing and has
-not learned the commanded motion. Its return90.98 alone is not evidence of
-velocity tracking. No claim of WM speedup is supported at this stage.
+The hybrid is still running pending the next stability evaluation. Its first
+training evaluation at311.65 active seconds was standing (XY0.47737 m/s,
+return90.98). At update2150 it passes every command in real physics. This pilot
+observes earlier acceptance than MBDAC, later acceptance than source FastSAC,
+and fewer real transitions than either. Sparse evaluation cadence, one seed
+and the integration differences below limit that comparison. The WM-disabled
+control and G1 task are still pending. No overall WM wall-clock advantage over
+upstream FastSAC has been demonstrated.
 
 ## Costs and retained failures
 

@@ -56,7 +56,9 @@
   3520 次更新时首次观测逐指令达标（2451.07 s），XY 0.0525 m/s、yaw 0.0461 rad/s；
   3940 次更新再次逐指令达标，XY 0.0431 m/s、yaw 0.0344 rad/s，按稳定验收条件停止。
   总过程 2862.40 s（不含退出时的 W&B 同步），含同步的子进程完整耗时 2900.46 s。
-- 当前 `native_go1_wm_fastsac_v3` 已进入真实训练，1024 世界，启动阶段显存约 5.4 GB，无 OOM。
+- `native_go1_wm_fastsac_v3` 在 2150 次更新、914.48 s（不含评估）首次逐指令达标：
+  XY 0.07986 m/s、yaw 0.07416 rad/s，40 个评估世界全部存活，真实采样 2,212,864 条。
+  包含评估的结果可见时间为 955.46 s，仍在等待第二次稳定评估。1024 世界，无 OOM。
   后续顺序运行同接口的 `native_go1_real_only_v3` 对照，
   以及 `native_g1_wm_fastsac_v3`。所有网络、replay 与 normalization 从零初始化。
 - v3 hybrid 使用与原版相同的 3e-4 actor LR；WM warmup 后使用 0.9 真实 SAC + 0.1 模型 H=8 梯度。
@@ -66,7 +68,9 @@
 它不覆盖已有 trial。每轮保存实际 source snapshot，最终从评估 JSONL 生成图。
 视频由实际 native GPU trajectory 渲染，不做 joint smoothing。
 
-当前不能宣称 WM+FastSAC 比原版更快：第三条正式曲线、同接口对照及 G1 实验尚未完成。
+三条正式曲线现已都有首次达标点，但混合版稳定性、同接口对照及 G1 实验尚未完成。
+该轮混合版首次观测达标比 MBDAC 早、比原版 FastSAC 晚；不能宣称超过原版 FastSAC。
+编译范围、normalization 统计来源和 Q 记忆输入差异已逐项记录在协议中。
 
 0.3.3 独立 wheel 验证：50 passed、5 个可选依赖跳过，28 个子模块不需要 simulator SDK。
 源码和 wheel 内全部 30 项源码/数据文件与 5 项许可证逐字节一致。
