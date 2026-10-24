@@ -1,0 +1,8 @@
+# Provenance
+
+- Algorithm reference: SuperMimic, arXiv:2610.28480, sections 3 and appendices A-G. Independent implementation; no claim of an official release.
+- Initial numerical implementations: `zita-ch/supermimic_vibed`, commit `a1508d42c9d1699a52e8233ab16d08c488441ab9`, MIT, Copyright 2026 ETH Zurich, Chong Zhang. See `supermimic_vibed-MIT.txt`. Rotation utilities, G1 robot constants, FK, motion processing, analytic task formulas, and URDF conversion retain source headers. Learner architecture/update math follows this reference, refactored into an independent package.
+- Public interface design: RSL-RL 5.x, especially v5.0.1, without importing or monkeypatching its learner or copying a full runner.
+- MJLab example uses installed MJLab 1.2.0 and its native managers; its distribution retains its own license.
+- Example assets download from Hugging Face `lvhaidong/LAFAN1_Retargeting_Dataset`, revision `ce1572906efe6157840e8474d5a0d7aa87481e74`. The download preserves the dataset README and root license separately under `data/source_notices`, and records individual SHA256 hashes. Assets and motions are not included in the package or Git history. The HF root license identifies Unitree robot assets (BSD-3-Clause); original LAFAN1 motions have their own upstream conditions at https://github.com/ubisoft/ubisoft-laforge-animation-dataset. Package licensing does not replace those asset/data terms.
+- `MBDACAMP` is an additional AMP extension; the reference repository's `--amp bf16` means mixed precision and is unrelated to an adversarial motion discriminator.
