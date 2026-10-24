@@ -143,3 +143,22 @@ def test_model_weight_zero_avoids_model_and_mixture_preserves_input_gradients():
     assert 'real_actor_loss' in logs and 'model_actor_loss' in logs and any(v>0 for v in seen)
     assert abs(logs['actor_loss']-(.1*logs['model_actor_loss']+.9*logs['real_actor_loss']))<1e-6
     assert all(torch.equal(v,alg.world_model.state_dict()[k]) for k,v in before.items())
+
+
+def test_raw_action_std_bounds_remove_per_joint_scale_amplification(tmp_path):
+    from mbdac.modules.holosoma import HolosomaActor
+    from mbdac.algorithms.mbdac_fast_sac import FAST_SAC_DEFAULTS
+    options={**FAST_SAC_DEFAULTS,'actor_hidden_dim':16,'action_scale':[1.,20.],
+             'action_std_min':.01,'action_std_max':.2}
+    actor=HolosomaActor(2,1,2,2,options)
+    hist=torch.randn(5,2,2);goal=torch.ones(5,1)
+    _,_,log_std=actor.net(actor.inputs(hist,goal))
+    actual=actor.net.action_scale*log_std.exp()
+    assert torch.allclose(actual,torch.full_like(actual,(.01*.2)**.5),atol=1e-7)
+    with torch.no_grad(): actor.net.fc_logstd.bias.fill_(100)
+    _,_,log_std=actor.net(actor.inputs(hist,goal))
+    assert torch.allclose(actor.net.action_scale*log_std.exp(),torch.full_like(actual,.2),atol=1e-6)
+    sample,logp=actor.sample(hist,goal);assert torch.isfinite(logp).all()
+    logp.mean().backward();assert actor.net.fc_mu[0].weight.grad is not None
+    restored=HolosomaActor(2,1,2,2,options);restored.load_state_dict(actor.state_dict())
+    assert torch.equal(restored(hist,goal),actor(hist,goal))

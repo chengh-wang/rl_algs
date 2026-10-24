@@ -60,8 +60,12 @@ def main():
     p.add_argument('--model-actor-weight',type=float)
     p.add_argument('--log-std-min',type=float)
     p.add_argument('--log-std-max',type=float)
+    p.add_argument('--action-std-min',type=float,help='Exploration std in raw WM/replay control units')
+    p.add_argument('--action-std-max',type=float,help='Exploration std upper bound in raw WM/replay control units')
     p.add_argument('--compile',action='store_true');p.add_argument('--smoke',action='store_true')
     args=p.parse_args()
+    if (args.action_std_min is not None or args.action_std_max is not None) and (args.log_std_min is not None or args.log_std_max is not None):
+        p.error('Choose raw-action std bounds or pre-tanh log-std bounds, not both')
     if args.log_dir.exists() and (args.log_dir/'config.json').exists() and not args.resume:
         p.error('Use a new output directory; existing experiments are preserved')
     torch.set_num_threads(4);torch.manual_seed(args.seed);np.random.seed(args.seed);random.seed(args.seed)
@@ -73,7 +77,7 @@ def main():
     cfg.update(seed=args.seed,num_envs=args.num_envs,motion_dir=str(motion_file.parent.resolve()))
     if args.critic_batch is not None: cfg['algorithm']['fast_sac']['critic_batch']=args.critic_batch
     if args.wm_only_iters is not None: cfg['algorithm']['wm_only_iters']=args.wm_only_iters
-    for name in ('model_actor_weight','log_std_min','log_std_max'):
+    for name in ('model_actor_weight','log_std_min','log_std_max','action_std_min','action_std_max'):
         value=getattr(args,name)
         if value is not None: cfg['algorithm']['fast_sac'][name]=value
     cfg['initialized_from']='scratch'

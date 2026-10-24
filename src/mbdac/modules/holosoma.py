@@ -34,6 +34,14 @@ class HolosomaActor(nn.Module):
         self.net=Actor({'policy':dict(start=0,end=dim,size=dim)},['policy'],action_dim,1,
                        options['actor_hidden_dim'],options['log_std_max'],options['log_std_min'],
                        device='cpu',action_scale=torch.as_tensor(options['action_scale'],dtype=torch.float32).expand(action_dim).clone())
+        if options.get('action_std_min') is not None:
+            # tanh is 1-Lipschitz: scaled pre-tanh std upper-bounds action std.
+            # Convert control-space bounds per joint; leave mean/PD range intact.
+            for suffix in ['min','max']:
+                value=torch.as_tensor(options['action_std_'+suffix],dtype=torch.float32).expand(action_dim)
+                log_bound=torch.log(value/self.net.action_scale)
+                delattr(self.net,'log_std_'+suffix)
+                self.net.register_buffer('log_std_'+suffix,log_bound)
 
     def inputs(self, history, goal):
         # Flatten explicitly: source normalizer stats have a leading batch axis.

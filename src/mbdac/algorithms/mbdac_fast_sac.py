@@ -18,7 +18,8 @@ FAST_SAC_DEFAULTS=dict(actor_hidden_dim=512,critic_hidden_dim=768,num_atoms=501,
     actor_lr=3e-4,critic_lr=3e-4,alpha_lr=3e-4,alpha_init=.001,
     target_entropy_ratio=.5,tau=.05,critic_updates=4,policy_frequency=2,
     critic_batch=256,actor_grad_clip=1.,critic_grad_clip=0.,action_scale=1.,
-    weight_decay=.001,alpha_weight_decay=.01,model_actor_weight=1.)
+    weight_decay=.001,alpha_weight_decay=.01,model_actor_weight=1.,
+    action_std_min=None,action_std_max=None)
 
 
 @dataclass
@@ -45,6 +46,13 @@ class MBDACFastSAC(MBDAC):
             raise ValueError('Invalid FastSAC horizon, update schedule or value support')
         if not 0<=f['model_actor_weight']<=1:
             raise ValueError('model_actor_weight must be in [0,1]')
+        if (f['action_std_min'] is None)!=(f['action_std_max'] is None):
+            raise ValueError('Specify both raw-action standard deviation bounds')
+        if f['action_std_min'] is not None:
+            lo,hi=(torch.as_tensor(f[name],dtype=torch.float32) for name in ['action_std_min','action_std_max'])
+            if (lo.numel() not in (1,task.action_dim) or hi.numel() not in (1,task.action_dim) or
+                    not torch.isfinite(lo).all() or not torch.isfinite(hi).all() or (lo<=0).any() or (hi<lo).any()):
+                raise ValueError('Invalid raw-action standard deviation bounds')
         super().__init__(task,num_envs,cfg,device)
         self.opt_actor=torch.optim.AdamW(self.actor.parameters(),lr=f['actor_lr'],betas=(.9,.95),weight_decay=f['weight_decay'])
         self.opt_critic=torch.optim.AdamW(self.critic.parameters(),lr=f['critic_lr'],betas=(.9,.95),weight_decay=f['weight_decay'])
@@ -183,6 +191,10 @@ class MBDACFastSAC(MBDAC):
             self.opt_actor.zero_grad(set_to_none=True); loss.backward()
             norm=nn.utils.clip_grad_norm_(self.actor.parameters(),self.cfg.fast_sac['actor_grad_clip'] or float('inf'),error_if_nonfinite=True)
             self.opt_actor.step()
+        with torch.no_grad():
+            _,_,log_std=self.actor.net(self.actor.inputs(history,self.task.goal(start['condition'])))
+            std_bound=self.actor.net.action_scale*log_std.exp()
+            logs.update(action_std_bound_mean=float(std_bound.mean()),action_std_bound_max=float(std_bound.max()))
         self.actor_updates+=1
         return {**logs,'actor_loss':float(loss.detach()),'actor_grad_norm':float(norm),'model_actor_weight':weight}
 
