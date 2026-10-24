@@ -76,3 +76,40 @@ The evaluator uses nominal standing initialization, five fixed commands (forward
 Expert loading keeps the original generator alive across discriminator updates. The upstream loader chooses clips from its internal batch index; repeatedly creating a generator and taking its first batch would train on only the first clip. The adapter preserves the baseline's 20-batch cycle, covering all 18 clips and then repeating clips 0 and 1, before starting the next cycle.
 
 MBDACAMP keeps the first 500 iterations strictly WM-only. Afterwards each outer iteration fits WM ten times, updates the discriminator once on real/expert data, updates the actor once through the frozen model/prior, and fits the critic twenty times. This avoids pretraining a discriminator against an actor that cannot yet change. The AMP extension is our design; SuperMimic does not prescribe an AMP schedule. Discriminator learning rate follows the learner schedule unless explicitly overridden in `amp.lr`.
+
+## Direct upstream prior reuse
+
+New velocity runs now default to `--prior upstream`. This uses the installed
+fork's `Discriminator`, `Normalizer`, and `compute_grad_pen` directly, including
+ReLU, ±10 normalization clipping, raw-expert gradient penalty, optimizer weight
+decays, and its post-step normalization-update ordering. The fork updates those
+statistics from normalized current-state samples; this behavior is retained for
+the comparison rather than silently replaced. The task/style blend is unchanged.
+The only reward wrapper change is retaining input gradients for BPTT; the source
+PPO prediction helper has a `no_grad` context.
+
+The example reads the upstream configuration's initial 1e-3 discriminator learning
+rate and holds it fixed (`amp.lr`). WM/actor/critic retain the reference model-based
+2e-4 schedule. PPO's KL-dependent joint learning-rate changes are not transferred
+to the deterministic model-based actor. Update counts and batch sizes also remain
+the documented laptop adaptations, so this is still not a pure actor-only ablation.
+
+`--prior independent` retains the earlier generic prior. Existing checkpoints
+without a backend field automatically resume with that legacy prior. To reuse a
+WM-only legacy checkpoint and initialize a new upstream discriminator:
+
+```bash
+.venv-amp/bin/python -m examples.mjlab_amp.train --algorithm MBDACAMP \
+  --num-envs 1024 --compile --resume /path/to/model_500.pt \
+  --prior upstream --reset-prior --iterations 2500 \
+  --log-dir logs/velocity_upstream_prior
+```
+
+This ends at outer iteration 3000. It restores actor/critic/WM, their optimizers,
+normalization and counters, while intentionally initializing a new discriminator.
+Use an actually WM-only checkpoint for this controlled restart; changing prior
+architecture without `--reset-prior` is rejected by strict checkpoint loading.
+`tests/test_upstream_prior.py` compares reward values, input gradients, a full
+discriminator optimizer step and normalization statistics against the actual
+fork, then checks checkpoint restoration. The native 1024-world smoke run is an
+interface check, not evidence of improved policy quality.

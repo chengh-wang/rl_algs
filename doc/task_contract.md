@@ -76,4 +76,25 @@ Restoring a checkpoint with replay marks its latest stored streams as truncated 
 
 The core also exposes a generic `RslModelAdapter` protocol bridge. Other simulator backends are deferred from the current MJLab training and acceptance scope; a bridge alone does not supply the task's physical functions or terminal-state capture.
 
+## Reusing an existing AMP module
+
+An AMP task may implement `make_amp_prior(device, amp_options)` to return a
+task-owned `nn.Module`; the core imports no framework or RL library to construct
+it. The module exposes `norm` (callable with `update`), `net` (normalized paired
+features to score) and differentiable `reward(phi0, phi1)` before external reward
+scaling. Optional hooks are `optimizer_parameters()` for parameter groups,
+`gradient_penalty(expert0, expert1, strength)`, and
+`after_update(normalized_policy_pairs, normalized_expert_pairs)`.
+`normalize_before_update=False` delegates normalization updates to that last
+hook. Without a provider the package's independent AMP prior is unchanged.
+`amp.max_grad_norm=None` disables discriminator clipping while still rejecting
+non-finite gradients. Actor, model and critic clipping are unaffected.
+
+The native velocity example's `UpstreamAmpPrior` calls the pinned fork's actual
+discriminator, normalizer and gradient-penalty code. Its reward wrapper removes
+only the source prediction helper's `no_grad` context, preserving the same
+forward formula with input gradients. Checkpoint state includes portable numeric
+normalizer statistics; it does not pickle the external modules. Actor-only
+inference still requires neither the prior nor its source library.
+
 `world_model_diagnostics` reports state prediction errors in physical units. For declared primitive heads it separately measures error on real input states/transitions (`head_oracle`) and error through the multi-step predicted rollout (`head_rollout`). Head RMSE uses each spec's physical units, or probability units for binary contact, and excludes samples after reset or an exogenous replay boundary.

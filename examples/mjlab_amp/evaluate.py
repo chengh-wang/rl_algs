@@ -72,6 +72,9 @@ def main():
     torch.set_num_threads(4); args.output.mkdir(parents=True,exist_ok=True)
     checkpoint=torch.load(args.checkpoint,map_location='cpu',weights_only=False)
     policy,clip,algorithm=load_policy(checkpoint)
+    prior_backend=(checkpoint['cfg']['algorithm']['amp'].get('backend','independent') if algorithm=='MBDACAMP'
+                   else 'upstream' if algorithm=='AMP+PPO' else None)
+    video_label=algorithm+(f' ({prior_backend} prior)' if algorithm=='MBDACAMP' else '')
     cfg,failures=evaluation_config(args.seconds)
     env=BaselineVelocityEnv(5,seed=args.seed,cfg=cfg,render_mode='rgb_array' if args.video else None)
     model=task=replay=None; diagnostics={}
@@ -128,7 +131,7 @@ def main():
                 from PIL import Image,ImageDraw
                 frame=Image.fromarray(env.render()); draw=ImageDraw.Draw(frame)
                 draw.rectangle((0,0,640,62),fill=(20,20,20))
-                draw.text((10,6),f'{algorithm} | checkpoint {checkpoint["iter"]} | native MJLab | t={step*env.step_dt:.2f}s',fill='white')
+                draw.text((10,6),f'{video_label} | checkpoint {checkpoint["iter"]} | native MJLab | t={step*env.step_dt:.2f}s',fill='white')
                 draw.text((10,24),'command: vx=0.80 m/s, vy=0, yaw=0',fill='white')
                 velocity=values['velocity'][0].cpu().tolist()
                 draw.text((10,42),f'actual: vx={velocity[0]:.2f}, vy={velocity[1]:.2f}, yaw={velocity[2]:.2f}',fill='white')
@@ -160,7 +163,7 @@ def main():
                 touchdowns_per_foot=(~contact[:-1]&contact[1:]).sum(0).tolist())
             if steady.sum()>1: row['joint_acceleration_rms_rad_s2']=float(np.sqrt(np.mean((np.diff(arrays['joint_vel'][steady,index],axis=0)/env.step_dt)**2)))
         cases.append(row)
-    result=dict(algorithm=algorithm,checkpoint=str(args.checkpoint.resolve()),iteration=checkpoint['iter'],
+    result=dict(algorithm=algorithm,prior_backend=prior_backend,checkpoint=str(args.checkpoint.resolve()),iteration=checkpoint['iter'],
         checkpoint_sha256=hashlib.sha256(args.checkpoint.read_bytes()).hexdigest(),
         training_elapsed_s=checkpoint.get('elapsed_s'),real_transitions=checkpoint.get('real_transitions'),
         task='Unitree-G1-AMP-Flat',seed=args.seed,requested_horizon_s=args.seconds,physics_dt=.005,control_dt=env.step_dt,

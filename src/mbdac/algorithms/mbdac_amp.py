@@ -21,8 +21,11 @@ class AmpPrior(nn.Module):
 class MBDACAMP(MBDAC):
     def __init__(self, task, num_envs, cfg=None, device='cpu'):
         super().__init__(task,num_envs,cfg,device)
-        self.prior=AmpPrior(task.amp_feature_dim,self.cfg.amp.get('hidden',(1024,512,256))).to(device)
-        self.opt_prior=torch.optim.Adam(self.prior.parameters(),lr=self.cfg.amp.get('lr',self.cfg.lr))
+        factory=getattr(task,'make_amp_prior',None)
+        self.prior=(factory(device,self.cfg.amp) if factory else
+                    AmpPrior(task.amp_feature_dim,self.cfg.amp.get('hidden',(1024,512,256)))).to(device)
+        parameters=getattr(self.prior,'optimizer_parameters',self.prior.parameters)()
+        self.opt_prior=torch.optim.Adam(parameters,lr=self.cfg.amp.get('lr',self.cfg.lr))
 
     def _reward(self, state, condition, action, previous, state0, context):
         task_reward=super()._reward(state,condition,action,previous,state0,context)
@@ -36,15 +39,28 @@ class MBDACAMP(MBDAC):
         with torch.no_grad():
             p0,p1=self.task.amp_features(real['s']),self.task.amp_features(real['s1'])
             e0,e1=self.task.sample_expert_features(count)
-            self.prior.norm.update(torch.cat((p0,p1,e0,e1)))
+            if getattr(self.prior,'normalize_before_update',True):
+                self.prior.norm.update(torch.cat((p0,p1,e0,e1)))
         expert=torch.cat((self.prior.norm(e0),self.prior.norm(e1)),-1).detach().requires_grad_(True)
         policy=torch.cat((self.prior.norm(p0),self.prior.norm(p1)),-1).detach()
         dp=self.prior.net(policy).squeeze(-1); de=self.prior.net(expert).squeeze(-1)
-        grad=torch.autograd.grad(de.sum(),expert,create_graph=True)[0]
-        penalty=self.cfg.amp.get('gradient_penalty',10.)*grad.square().sum(-1).mean()
+        strength=self.cfg.amp.get('gradient_penalty',10.)
+        if hasattr(self.prior,'gradient_penalty'):
+            penalty=self.prior.gradient_penalty(e0,e1,strength)
+        else:
+            grad=torch.autograd.grad(de.sum(),expert,create_graph=True)[0]
+            penalty=strength*grad.square().sum(-1).mean()
         loss=.5*((dp+1).square().mean()+(de-1).square().mean())+penalty
+        if not torch.isfinite(loss): raise FloatingPointError('Discriminator loss is non-finite')
         self.opt_prior.zero_grad(set_to_none=True); loss.backward()
-        nn.utils.clip_grad_norm_(self.prior.parameters(),1.,error_if_nonfinite=True); self.opt_prior.step()
+        max_norm=self.cfg.amp.get('max_grad_norm',1.)
+        if max_norm is not None:
+            nn.utils.clip_grad_norm_(self.prior.parameters(),max_norm,error_if_nonfinite=True)
+        elif any(p.grad is not None and not torch.isfinite(p.grad).all() for p in self.prior.parameters()):
+            raise FloatingPointError('Discriminator gradient is non-finite')
+        self.opt_prior.step()
+        if hasattr(self.prior,'after_update'):
+            self.prior.after_update(policy.detach(),expert.detach())
         return {'amp_loss':float(loss.detach()),'amp_gradient_penalty':float(penalty.detach()),'amp_policy_score':float(dp.detach().mean()),'amp_expert_score':float(de.detach().mean())}
 
     def before_actor_update(self, iteration):

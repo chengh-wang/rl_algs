@@ -1,6 +1,6 @@
 # Native MJLab AMP velocity comparison (2026-10-24)
 
-Status: the first 2000 MBDACAMP iterations and three matched physical evaluations are complete. Velocity tracking and gait quality remain below the retained PPO forward-walking baseline; no speed advantage at matched quality is established.
+Status: the independent-prior trial completed 4000 MBDACAMP iterations and five matched physical evaluations. A follow-up now reuses the upstream prior modules directly. Velocity tracking and gait quality remain below the retained PPO forward-walking baseline; no speed advantage at matched quality is established.
 
 ## Fixed evaluation protocol
 
@@ -78,3 +78,45 @@ RMS difference is 0.0487; at 2500 it is 0.0879. These are action coordinates bef
 the native per-joint scale, not radians or a physical tracking error. This checks
 the input route and changing policy sensitivity; it does not establish successful
 velocity control. Evidence: `logs/velocity_initial_command_sensitivity.json`.
+
+
+## Independent-prior continuation to 4000
+
+The 3000 and 4000 checkpoints both survive every nominal 20 s case. At 4000,
+forward vx falls to 0.226 m/s for a 0.8 m/s request. Yaw and slipping improve,
+but the robot shuffles rather than meeting the requested walking speed.
+
+| Command | 3000 XY RMSE (m/s) | 4000 XY RMSE (m/s) | 4000 yaw RMSE (rad/s) |
+| --- | ---: | ---: | ---: |
+| forward | 0.5568 | 0.5762 | 0.2642 |
+| backward | 0.2962 | 0.4022 | 0.1346 |
+| lateral_left | 0.4139 | 0.3730 | 0.3369 |
+| turn_left | 0.1287 | 0.0262 | 0.6063 |
+| stand | 0.1375 | 0.0416 | 0.1341 |
+
+Checkpoint 4000 contains 10,436,608 real transitions, with 2964.17 s cumulative
+trainer time. Total process cost to the saved checkpoint, including all three
+launches and the failed first compilation, is 3181.42 s (53.02 min). This remains
+below PPO's 136.62 min in duration, but **does not reach matched control quality**.
+Forward foot-slip RMS falls from 0.469 to 0.217 m/s, and joint-acceleration RMS
+from 82.1 to 43.8 rad/s². Contact liftoffs remain excessive (123/110 over 18 s).
+Fresh WM one/eight-step linear-velocity RMSE is 0.0222/0.0220 m/s and joint-position
+RMSE 0.00366/0.0102 rad. Improved model errors do not prove correct actor gradients
+or a successful velocity policy.
+
+The independent-prior experiment is retained as measured research evidence; no
+extra iterations are appended to it. The next AMP experiment directly imports
+the original discriminator/normalizer/gradient penalty, with an input-differentiable
+wrapper. Its reward, full discriminator optimizer step, normalization update and
+checkpoint restoration pass numerical comparison against the actual fork. Its
+1024-world smoke test passes; policy quality for this variant is still unproven.
+See `doc/velocity_benchmark.md` for exact upstream semantics and remaining
+algorithm/rate/batch differences. Reuse the genuinely WM-only iteration-500
+checkpoint with a newly initialized upstream prior, without carrying over the
+independent discriminator or the later independently trained actor.
+
+Evidence: `logs/velocity_comparison_4000/comparison.json`,
+`logs/velocity_eval_mbdacamp_{3000,4000}/evaluation.json`,
+`logs/velocity_eval_mbdacamp_4000/forward.mp4`,
+`logs_upstream_prior_tests.console.log` and
+`logs/velocity_upstream_prior_smoke/metrics.jsonl`.

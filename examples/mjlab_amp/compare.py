@@ -50,6 +50,7 @@ def main():
     result=dict(baseline_evaluation=str(args.baseline.resolve()),candidate_evaluation=str(args.candidate.resolve()),
         baseline_checkpoint=baseline['checkpoint'],candidate_checkpoint=candidate['checkpoint'],
         baseline_iteration=baseline['iteration'],candidate_iteration=candidate['iteration'],
+        baseline_prior_backend=baseline.get('prior_backend'),candidate_prior_backend=candidate.get('prior_backend'),
         task=baseline['task'],same_evaluation_protocol=True,timing=timing,cases=rows,
         caveats=['Report different training environment/batch counts and policy architectures.',
                  'Two checkpoints alone do not establish time to matched quality.',
