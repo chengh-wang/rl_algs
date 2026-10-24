@@ -12,6 +12,7 @@ class PrimitiveSpec:
     units: str
     frame: str
     binary: bool = False
+    transition: bool = False
 
     def __post_init__(self):
         if not self.name or self.dim < 1 or not self.units or not self.frame:

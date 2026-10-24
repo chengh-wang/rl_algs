@@ -28,6 +28,7 @@ class ReplayBuffer:
         rows=self._row(start[:,None]+torch.arange(window,device=self.device))
         out={k:v[rows,env[:,None]] for k,v in self.data.items()}
         done=out['terminated']|out['truncated']
+        if 'model_boundary' in out: done=done|out['model_boundary']
         out['mask']=torch.cumprod(torch.cat((torch.ones(batch,1,device=self.device),1-done[:,:-1].float()),1),1)
         return out
 

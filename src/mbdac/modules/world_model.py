@@ -12,7 +12,10 @@ class WorldModel(nn.Module):
         self.output_norm=RunningNorm(codec.delta_dim,eps=1e-4)
         self.net=mlp(codec.feature_dim+action_dim+context_dim,hidden,codec.delta_dim,nn.SiLU,True)
         nn.init.zeros_(self.net[-1].weight); nn.init.zeros_(self.net[-1].bias)
-        self.primitive_heads=PrimitiveHeads(codec.feature_dim+context_dim,primitive_specs)
+        names=[s.name for s in primitive_specs]
+        if len(set(names))!=len(names): raise ValueError('Duplicate physical primitive names')
+        self.primitive_heads=PrimitiveHeads(codec.feature_dim+context_dim,[s for s in primitive_specs if not s.transition])
+        self.transition_heads=PrimitiveHeads(2*codec.feature_dim+action_dim+context_dim,[s for s in primitive_specs if s.transition])
 
     def inputs(self, state, action, context):
         return torch.cat((self.codec.features(state),action,context),-1)
@@ -26,3 +29,16 @@ class WorldModel(nn.Module):
 
     def primitives(self, state, context):
         return self.primitive_heads(self.primitive_inputs(state,context))
+
+    def transition_inputs(self,state,action,next_state,context):
+        return torch.cat((self.codec.features(state),action,self.codec.features(next_state),context),-1)
+
+    def transition_primitives(self,state,action,next_state,context):
+        return self.transition_heads(self.transition_inputs(state,action,next_state,context))
+
+    def _load_from_state_dict(self,state_dict,prefix,local_metadata,strict,missing_keys,unexpected_keys,error_msgs):
+        if not self.transition_heads.specs:
+            # Legacy checkpoints have identical dynamics and no transition heads.
+            for key,value in self.transition_heads.state_dict().items():
+                state_dict.setdefault(prefix+'transition_heads.'+key,value)
+        super()._load_from_state_dict(state_dict,prefix,local_metadata,strict,missing_keys,unexpected_keys,error_msgs)

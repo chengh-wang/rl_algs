@@ -25,7 +25,7 @@ class G1ModelTask(MDP):
     def observation(self, state, previous_action, context, condition, primitives=None):
         return super().obs(self.codec.unpack(state),previous_action,context,condition)
 
-    def reward(self, state, condition, action, previous_action, primitives=None,terms=False):
+    def reward(self, state, condition, action, previous_action, primitives=None,terms=False,previous_state=None):
         return super().reward(self.codec.unpack(state),condition,action,previous_action,terms=terms)
 
     def termination_probability(self, state, condition, primitives=None):
@@ -34,7 +34,7 @@ class G1ModelTask(MDP):
     def hard_termination(self, state, condition):
         return super().termination(self.codec.unpack(state),condition)
 
-    def advance(self, condition): return condition+1
+    def advance(self, condition, state=None, context=None): return condition+1
 
     def goal(self, condition): return self.motion.goal(condition,10)
 

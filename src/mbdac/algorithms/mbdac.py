@@ -105,6 +105,7 @@ class MBDAC:
         self.world_model.output_norm.update(self.task.codec.targets(tr['s'],tr['s1']))
         labels={k.split('/',1)[1]:v for k,v in tr.items() if k.startswith('primitive/')}
         self.world_model.primitive_heads.update_normalization(labels,self.world_model.primitive_inputs(tr['s1'],ctx))
+        self.world_model.transition_heads.update_normalization(labels,self.world_model.transition_inputs(tr['s'],tr['a'],tr['s1'],ctx))
         self.fresh=dones.bool().clone()
 
     def _wm_rollout(self, w):
@@ -125,6 +126,8 @@ class MBDAC:
         features=self.world_model.primitive_inputs(w['s1'],self.task.normalize_context(w['context']))
         labels={k.split('/',1)[1]:v for k,v in w.items() if k.startswith('primitive/')}
         loss=loss+self.world_model.primitive_heads.loss(features,labels,w['mask'])
+        transition_features=self.world_model.transition_inputs(w['s'],w['a'],w['s1'],self.task.normalize_context(w['context']))
+        loss=loss+self.world_model.transition_heads.loss(transition_features,labels,w['mask'])
         if not torch.isfinite(loss): raise FloatingPointError('World-model loss is non-finite')
         self.opt_wm.zero_grad(set_to_none=True); loss.backward()
         norm=nn.utils.clip_grad_norm_(self.world_model.parameters(),1.,error_if_nonfinite=True)
@@ -148,7 +151,9 @@ class MBDAC:
         return self.world_model.primitives(state,self.task.normalize_context(context))
 
     def _reward(self, state, condition, action, previous, state0, context):
-        return self.task.reward(state,condition,action,previous,primitives=self._primitives(state,context))
+        primitives=self._primitives(state,context)
+        primitives.update(self.world_model.transition_primitives(state0,action,state,self.task.normalize_context(context)))
+        return self.task.reward(state,condition,action,previous,primitives=primitives,previous_state=state0)
 
     def _critic_features(self,state,condition,context):
         return self.task.critic_features(state,condition,context,primitives=self._primitives(state,context))
@@ -170,7 +175,7 @@ class MBDAC:
         with frozen(*frozen_modules):
             for _ in range(c.horizon):
                 action=self.actor(hist,self.task.goal(cond)).clamp(-c.action_clip,c.action_clip)
-                s1=self._wm_step(s,action,self.task.normalize_context(ctx)); cond1=self.task.advance(cond)
+                s1=self._wm_step(s,action,self.task.normalize_context(ctx)); cond1=self.task.advance(cond,state=s1,context=ctx)
                 prim=self._primitives(s1,ctx)
                 obs=self.task.add_noise(self.task.observation(s1,action,ctx,cond1,primitives=prim))
                 hist=torch.cat((hist[:,1:],obs[:,None]),1)

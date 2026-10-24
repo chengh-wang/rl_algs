@@ -15,10 +15,10 @@ class ToyTask:
     def normalize_context(self,x): return x
     def observation(self,s,a,ctx,c,primitives=None): return s
     def add_noise(self,o): return o
-    def advance(self,c): return c
+    def advance(self,c,state=None,context=None): return c
     def goal(self,c): return c
     def valid_start(self,c,h): return torch.ones(len(c),dtype=torch.bool)
-    def reward(self,s,c,a,prev,primitives=None): return -(s[:,0]-c[:,0]).square()-.01*a.square().sum(-1)
+    def reward(self,s,c,a,prev,primitives=None,previous_state=None): return -(s[:,0]-c[:,0]).square()-.01*a.square().sum(-1)
     def termination_probability(self,s,c,primitives=None): return torch.sigmoid((s[:,0].abs()-5)*10)
     def critic_features(self,s,c,ctx,primitives=None): return torch.cat((s,c,ctx),-1)
     def amp_features(self,s): return s
@@ -183,3 +183,39 @@ def test_optimizer_schedule_matches_reference_warmup_and_10_1_20_ratio():
     order.clear(); alg.update(2)
     assert calls==dict(wm=30,actor=1,critic=20)
     assert order==['wm']*10+['actor']+['critic']*20
+
+
+def test_transition_primitive_has_action_gradients_without_reward_supervision():
+    from mbdac.modules.world_model import WorldModel
+    model=WorldModel(EuclideanCodec(2),1,1,hidden=(8,),primitive_specs=[PrimitiveSpec('contact_force',1,'N','world',transition=True)])
+    state=torch.randn(4,2); action=torch.randn(4,1,requires_grad=True); context=torch.zeros(4,1)
+    nxt=model(state,action,context)
+    assert model.primitives(nxt,context)=={}
+    force=model.transition_primitives(state,action,nxt,context)['contact_force']
+    cost1=force.square().sum(); cost2=3*force.square().sum()
+    g1=torch.autograd.grad(cost1,action,retain_graph=True)[0]
+    g2=torch.autograd.grad(cost2,action)[0]
+    assert torch.isfinite(g1).all() and g1.abs().sum()>0
+    assert torch.allclose(g2,3*g1,atol=1e-6)
+    with torch.no_grad():
+        features=model.transition_inputs(state,action,nxt,context)
+        model.transition_heads.update_normalization({'contact_force':torch.randn(4,1)},features)
+    loss=model.transition_heads.loss(features,{'contact_force':torch.randn(4,1)},torch.ones(4))
+    assert torch.isfinite(loss)
+
+
+def test_legacy_checkpoint_without_unused_transition_heads_loads_strictly():
+    alg=MBDAC(ToyTask(),4,config())
+    old={k:v for k,v in alg.world_model.state_dict().items() if not k.startswith('transition_heads.')}
+    alg.world_model.load_state_dict(old,strict=True)
+
+
+def test_exogenous_boundary_masks_world_model_windows():
+    env=ToyEnv(); replay=ReplayBuffer(8,4,'cpu')
+    for i in range(6):
+        _,_,_,extras=env.step(torch.ones(4,1)*.1); tr=extras['model_transition']
+        tr['model_boundary']=torch.full((4,),i==1,dtype=torch.bool); replay.add(tr)
+    window=replay.sample_windows(256,4)
+    assert window['model_boundary'].any()
+    for i in range(1,4):
+        assert not torch.any((window['mask'][:,i]>0)&window['model_boundary'][:,:i].any(1))

@@ -18,15 +18,15 @@ from mbdac.utils.rotations import axis_angle_to_mat, quat_to_mat
 
 
 class G1Kinematics:
-    def __init__(self, device: str, tracked: list[str] = TRACKED_BODIES):
-        m = mujoco.MjModel.from_xml_path(MJCF_PATH)
+    def __init__(self, device: str, tracked: list[str] = TRACKED_BODIES, model=None, prefix=''):
+        m = model if model is not None else mujoco.MjModel.from_xml_path(MJCF_PATH)
         self.device = device
         jname_to_idx = {n: i for i, n in enumerate(G1_JOINT_NAMES)}
         # moving bodies in tree order (mujoco orders parents before children)
         bodies, parent, joint_idx, axes, offs_p, offs_R = [], [], [], [], [], []
         mj_to_local = {}
         for b in range(1, m.nbody):
-            name = m.body(b).name
+            name = m.body(b).name.removeprefix(prefix)
             if m.body_jntnum[b] == 0:
                 continue  # fixed links are merged visually only; none are tracked
             jid = m.body_jntadr[b]
@@ -40,7 +40,7 @@ class G1Kinematics:
                 while pb not in mj_to_local:  # skip fixed parents
                     raise RuntimeError(f"fixed parent for {name}")
                 parent.append(mj_to_local[pb])
-                joint_idx.append(jname_to_idx[m.joint(jid).name])
+                joint_idx.append(jname_to_idx[m.joint(jid).name.removeprefix(prefix)])
             axes.append(m.jnt_axis[jid].copy())
             offs_p.append(m.body_pos[b].copy())
             offs_R.append(m.body_quat[b].copy())
@@ -55,7 +55,7 @@ class G1Kinematics:
         # joint limits (in G1_JOINT_NAMES order)
         lo, hi = np.zeros(29), np.zeros(29)
         for j in range(m.njnt):
-            n = m.joint(j).name
+            n = m.joint(j).name.removeprefix(prefix)
             if n in jname_to_idx:
                 lo[jname_to_idx[n]], hi[jname_to_idx[n]] = m.jnt_range[j]
         self.q_lo = torch.tensor(lo, dtype=torch.float32, device=device)

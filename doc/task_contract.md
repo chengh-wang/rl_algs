@@ -11,9 +11,9 @@ normalize_context(context)
 observation(state, previous_action, context, condition, primitives=None)
 add_noise(observation)
 goal(condition)
-advance(condition)
+advance(condition, state=None, context=None)
 valid_start(condition, horizon)
-reward(state1, condition1, action, previous_action, primitives=None)
+reward(state1, condition1, action, previous_action, primitives=None, previous_state=None)
 termination_probability(state1, condition1, primitives=None)
 critic_features(state, condition, context, primitives=None)
 ```
@@ -46,7 +46,7 @@ Each spec declares its units and frame. `analytic_primitives` lists quantities a
 
 `primitive/<name>` in replay is the real measurement at **s1 before reset**, with the declared units/frame. Head input and output normalization update only from real data. Heads train against real physical states, rather than compensating for world-model state errors. During imagination their outputs stay differentiable with respect to predicted state, while their parameters are frozen during actor optimization. Observation, reward, termination and critic functions can all consume the same primitive predictions.
 
-Some measurements, such as an impulse over a time interval, are transition-dependent. This state-head interface should not silently treat those as state-only quantities; represent the needed physical memory in state or add an explicit transition-conditioned primitive adapter.
+Some measurements, such as a contact impulse or an instantaneous motor/contact acceleration, depend on the applied action and the transition. Declare those with `PrimitiveSpec(..., transition=True)`. Their heads receive `(state, action, state1, physical_context)` and train on real pre-reset transition measurements. This avoids treating them as state-only quantities. Transition predictions are available in the reward's `primitives` dictionary; state heads remain available to observation, termination and critic functions. When a quantity is analytically available from the transition, compute it directly using `previous_state`; for example, interval-average acceleration is `(v1-v0)/dt`. This average is different from a simulator's instantaneous acceleration at its last physics substep.
 
 ## Real transition schema
 
@@ -63,6 +63,8 @@ All values have leading dimension `num_envs`:
 | `primitive/<name>` | Optional real physical measurement at s1 |
 
 Reward labels are useful diagnostics but are not reward-head supervision. Replay windows include the terminal transition and mask everything after it. History samples stay within their episode and available replay range.
+
+`model_boundary` optionally marks an exogenous change after the recorded physics/reward snapshot, such as a velocity push applied by an interval event. WM windows stop at that boundary; the next real transition starts from the actual perturbed state. Observation histories continue because the environment did not reset. Task advancement may use predicted `state` and `context` for state-dependent goal/termination bookkeeping.
 
 ## Framework adapters
 
