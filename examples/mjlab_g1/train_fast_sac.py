@@ -56,6 +56,7 @@ def main():
     group.add_argument('--resume',type=Path)
     group.add_argument('--wm-checkpoint',type=Path,help='Warm-start only a compatible G1 physical WM; actor/Q/temperature start fresh')
     p.add_argument('--critic-batch',type=int)
+    p.add_argument('--real-actor-batch',type=int,help='Real-state SAC batch independent of the memory-limited WM actor batch')
     p.add_argument('--wm-only-iters',type=int)
     p.add_argument('--model-actor-weight',type=float)
     p.add_argument('--log-std-min',type=float)
@@ -76,6 +77,7 @@ def main():
     cfg=training_config(task,args.horizon,args.compile,args.logger,args.log_dir.name)
     cfg.update(seed=args.seed,num_envs=args.num_envs,motion_dir=str(motion_file.parent.resolve()))
     if args.critic_batch is not None: cfg['algorithm']['fast_sac']['critic_batch']=args.critic_batch
+    if args.real_actor_batch is not None: cfg['algorithm']['fast_sac']['real_actor_batch']=args.real_actor_batch
     if args.wm_only_iters is not None: cfg['algorithm']['wm_only_iters']=args.wm_only_iters
     for name in ('model_actor_weight','log_std_min','log_std_max','action_std_min','action_std_max'):
         value=getattr(args,name)

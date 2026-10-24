@@ -19,7 +19,7 @@ FAST_SAC_DEFAULTS=dict(actor_hidden_dim=512,critic_hidden_dim=768,num_atoms=501,
     target_entropy_ratio=.5,tau=.05,critic_updates=4,policy_frequency=2,
     critic_batch=256,actor_grad_clip=1.,critic_grad_clip=0.,action_scale=1.,
     weight_decay=.001,alpha_weight_decay=.01,model_actor_weight=1.,
-    action_std_min=None,action_std_max=None)
+    action_std_min=None,action_std_max=None,real_actor_batch=None)
 
 
 @dataclass
@@ -46,6 +46,8 @@ class MBDACFastSAC(MBDAC):
             raise ValueError('Invalid FastSAC horizon, update schedule or value support')
         if not 0<=f['model_actor_weight']<=1:
             raise ValueError('model_actor_weight must be in [0,1]')
+        if f['real_actor_batch'] is not None and f['real_actor_batch']<1:
+            raise ValueError('real_actor_batch must be positive')
         if (f['action_std_min'] is None)!=(f['action_std_max'] is None):
             raise ValueError('Specify both raw-action standard deviation bounds')
         if f['action_std_min'] is not None:
@@ -182,8 +184,13 @@ class MBDACFastSAC(MBDAC):
                 objective,logs=self.actor_objective(start,history)
                 logs['model_actor_loss']=float(-objective.detach())
             if weight<1 and self.cfg.horizon>0:
-                action,logp=self.actor.sample(history,self.task.goal(start['condition']))
-                value=self.critic.value(self._critic_features(start['s'],start['condition'],start['context']),action)
+                real_start,real_history=start,history
+                if self.cfg.fast_sac['real_actor_batch'] is not None:
+                    with torch.no_grad():
+                        real_start,rows=self.replay.sample_starts(self.cfg.fast_sac['real_actor_batch'],self.cfg.history)
+                        real_history=self._history(rows)
+                action,logp=self.actor.sample(real_history,self.task.goal(real_start['condition']))
+                value=self.critic.value(self._critic_features(real_start['s'],real_start['condition'],real_start['context']),action)
                 real_objective=(value-self.log_alpha.exp().detach()*logp).mean()
                 objective=weight*objective+(1-weight)*real_objective if weight else real_objective
                 logs.update(real_actor_loss=float(-real_objective.detach()),real_actor_entropy=float(-logp.detach().mean()))

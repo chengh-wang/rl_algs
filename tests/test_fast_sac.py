@@ -162,3 +162,13 @@ def test_raw_action_std_bounds_remove_per_joint_scale_amplification(tmp_path):
     logp.mean().backward();assert actor.net.fc_mu[0].weight.grad is not None
     restored=HolosomaActor(2,1,2,2,options);restored.load_state_dict(actor.state_dict())
     assert torch.equal(restored(hist,goal),actor(hist,goal))
+
+
+def test_real_actor_batch_is_independent_of_model_rollout_batch():
+    env=ToyEnv();cfg=config();cfg.fast_sac.update(model_actor_weight=.1,real_actor_batch=16)
+    alg=MBDACFastSAC(env.model_task,4,cfg);fill(alg,env);alg.update_world_model()
+    seen=[];sample=alg.actor.sample
+    def counted(hist,goal):
+        seen.append(len(hist));return sample(hist,goal)
+    alg.actor.sample=counted;alg.update_actor()
+    assert seen[:-1]==[8]*(cfg.horizon+1) and seen[-1]==16
