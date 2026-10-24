@@ -61,7 +61,9 @@ class MBDACAMP(MBDAC):
         self.opt_prior.step()
         if hasattr(self.prior,'after_update'):
             self.prior.after_update(policy.detach(),expert.detach())
-        return {'amp_loss':float(loss.detach()),'amp_gradient_penalty':float(penalty.detach()),'amp_policy_score':float(dp.detach().mean()),'amp_expert_score':float(de.detach().mean())}
+        return {'amp_loss':float(loss.detach()),'amp_gradient_penalty':float(penalty.detach()),
+                'amp_learning_rate':self.opt_prior.param_groups[0]['lr'],
+                'amp_policy_score':float(dp.detach().mean()),'amp_expert_score':float(de.detach().mean())}
 
     def before_actor_update(self, iteration):
         # Keep WM-only warmup genuinely WM-only. A discriminator trained for
