@@ -41,3 +41,38 @@ Discriminator updates now start together with actor updates after WM warmup, rat
 ## Physical tracking result and limits
 
 Checkpoint 5000 completed 26 of 40 entire reference clips in native physics without auto-reset, with mean normalized return 0.58493 across the full nominal clip durations. This includes walk, run, sprint, dance, jump and fighting clips; failures remain, particularly fall/get-up motions. Full-clip results must not be mixed with the earlier 20-second prefix return of 0.76334 at checkpoint 4000. The existing AMP+PPO comparison remains a separate matched velocity experiment; no performance advantage has been established yet.
+
+## FastSAC + WM follow-up: small tracking goal passed
+
+The source-pinned Holosoma numerical actor/C51 modules remain unchanged. The
+new learner and its failure history are documented in README. Corrected Q state
+includes previous action, measured policy memory and reference clock; finite
+reference completion suppresses Q bootstrapping, while ordinary time limits
+retain physical-next-state bootstrapping. Terminal-only reset bins are removed.
+Optional Q-only warmup is resumed through saved optimizer counters. Batched and
+sequential imagined reward losses/all actor gradients are regression-equivalent.
+
+Local32-phase physical perturbations show the old Q gradient improves the
+32-step real return in4/32cases, while model reward directions improve32/32.
+The bounded repeat applies0clamps. These returns include action-rate cost and
+are not a test isolating every dynamics derivative. Likewise, several recipe
+changes were made together; no single-fix causal or speedup claim is justified.
+The small-std probe's entropy contribution exceeded its positive tracking
+reward, exposing an early-failure incentive. The successful recipe explicitly
+uses rawstd0.05–0.8, actorLR5e-5, H32 and100%model actor objective, with100WM
+adaptation iterations then800Q-only updates before10WM/4Q/1actor per iteration.
+
+Only the physical WM from v5 is reused. Fresh actor/Q/temperature are audited.
+The selected v6/model1500 completes6s in native CUDA physics without reset,
+jointRMSE0.121609rad, globalbodyRMSE0.124699m; all6initial-phase cases also pass.
+Original99D observations, goal/action order, reward and physical PD interface
+are retained. No optional observation extension was used. Its21minnew training
+and28min38s source-WM run total49min39s; former57min15s MBDAC used more motions.
+This is a successful small demonstration, not equal-task benchmarking or broad
+robustness/convergence certification.
+
+Native tests45passed/1skip; installed core43passed/3skips. Actual trained actor
+export matches eagerly at batch1/16 with0error without SDKs. A1024-world trained
+full-resume update also passes. Raw physical trajectory/video, timing, source
+manifest and checkpoint hashes are under `logs/g1_wm_fastsac_v6_report/` and
+[W&B](https://forge.coreweave.com/wandb/sslab_motion_mimic-teams/mbdac-fastsac-tracking/runs/vn81zz42).

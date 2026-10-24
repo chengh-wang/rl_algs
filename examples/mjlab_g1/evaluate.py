@@ -52,6 +52,7 @@ def main():
     p.add_argument('--output',type=Path,default=Path('logs/evaluation'))
     p.add_argument('--video-clip',default='walk1_subject1'); p.add_argument('--video-seconds',type=float,default=12.)
     p.add_argument('--continue-after-failure',action='store_true',help='Keep physical simulation/video running, while metrics stop at the first failure')
+    p.add_argument('--save-trajectory',action='store_true',help='Save actual/reference physical states for diagnostic plots')
     args=p.parse_args(); args.output.mkdir(parents=True,exist_ok=True)
     ck=torch.load(args.checkpoint,map_location='cpu',weights_only=False)
     task=build_task(args.device,args.motion_dir); motion=task.motion; n=len(motion.names)
@@ -72,6 +73,7 @@ def main():
     video_id=motion.names.index(args.video_clip) if args.video_clip in motion.names else next(i for i,k in enumerate(motion.names) if k.startswith('walk'))
     video=Video(native.sim.mj_model,str(args.output/'reference_left_policy_right.mp4'))
     actual_buffer=[]; reference_buffer=[]; failed_buffer=[]
+    state_trace=[];reference_trace=[]
     try:
         for step in range(int(horizon.max())):
             action=policy(env.get_observations()).clamp(-runner.alg.cfg.action_clip,runner.alg.cfg.action_clip)
@@ -80,6 +82,9 @@ def main():
             transition.update(terminated=native.last_failure.clone(),eval_active=active.clone())
             if active.any(): diagnostic_replay.add(transition)
             s=extras['model_transition']['s1']; f=native.f
+            if args.save_trajectory:
+                state_trace.append(s.cpu().numpy().copy())
+                reference_trace.append(task.codec.pack(motion.ref_state(f)).cpu().numpy().copy())
             total_reward+=r*active; survived+=active.float()
             q=task.codec.unpack(s)[4]; sum_joint_error+=(q-motion.q[f]).square().mean(-1)*active
             bp=task.kin.forward(*task.codec.unpack(s))[0]
@@ -114,6 +119,8 @@ def main():
                     survived_fraction=float(np.mean([not r['failed'] for r in rows])),
                     video_clip=motion.names[video_id],video_layout='reference left, policy in real physics right',world_model=diagnostics,clips=rows)
         (args.output/'metrics.json').write_text(json.dumps(result,indent=2)+'\n')
+        if args.save_trajectory:
+            np.savez_compressed(args.output/'trajectory.npz',actual=np.stack(state_trace),reference=np.stack(reference_trace),dt=.02)
         print(json.dumps({k:v for k,v in result.items() if k!='clips'},indent=2))
     finally: video.close(); runner.close(); env.close()
 

@@ -60,11 +60,28 @@ All values have leading dimension `num_envs`:
 | `a`, `a_prev` | Applied policy action and previous applied policy action |
 | `context` | Physical parameters, calibration, friction, etc. for this transition |
 | `condition` | Task condition before stepping |
+| `condition1` | Optional actual pre-reset next command/condition; otherwise the task's analytic advance is used |
 | `ep_step` | Steps since the most recent reset, zero at episode start |
 | `terminated`, `truncated` | Real hard failure and timeout masks |
 | `primitive/<name>` | Optional real physical measurement at s1 |
+| `bootstrap` | Optional finite-task continuation mask at s1; zero suppresses Q bootstrapping even when reported as a timeout |
+| `terminal_actor_observation` | Optional measured pre-reset policy observation for reset rows |
 
 Reward labels are useful diagnostics but are not reward-head supervision. Replay windows include the terminal transition and mask everything after it. History samples stay within their episode and available replay range.
+
+MBDACFastSAC captures the actual real scalar reward for its standard Bellman/C51
+Q targets. This fits a value function, not a WM reward-total head. Physical WM
+and primitive-head targets remain physical measurements. It also preserves the
+measured policy observation history and previous applied action in Q state.
+
+Ordinary time limits can bootstrap from the physical pre-reset next state;
+finite task completion may require a zero continuation mask. The optional pure
+`task.bootstrap_mask(state1, condition1)` supplies this if the adapter did not
+capture `bootstrap`. It must return a leading-batch mask in [0,1]. A true
+physical termination always suppresses bootstrapping, regardless of that mask.
+The imagined termination function must represent the same semantic task end.
+For the finite G1 clip this occurs at its final reference frame. Reset samplers
+must choose an interval with a next frame, never an endpoint-only interval.
 
 `model_boundary` optionally marks an exogenous change after the recorded physics/reward snapshot, such as a velocity push applied by an interval event. WM windows stop at that boundary; the next real transition starts from the actual perturbed state. Observation histories continue because the environment did not reset. Task advancement may use predicted `state` and `context` for state-dependent goal/termination bookkeeping.
 

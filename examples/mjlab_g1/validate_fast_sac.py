@@ -55,8 +55,9 @@ def main():
         assert torch.equal(h1[:,:-1],h0[:,1:])
         assert torch.equal(h1[:,-1],tr['next_actor_observation'])
         q=alg._q_features(tr['s1'],c1,tr['context'],tr['a'],h1)
-        assert q.shape[1]==task.critic_dim+29+10*99
+        assert q.shape[1]==task.critic_dim+29+10*task.obs_dim
         result=dict(native_manager_based_env=True,num_envs=16,steps=12,q_state_dim=q.shape[1],
+            observation_dim=task.obs_dim,
             q_has_previous_action_and_actual_policy_memory=True,reference_clock_in_q=True,
             actual_history_max_abs=history_error,pre_reset_physical_gap=largest_gap,
             true_termination_count=int(torch.stack(all_terminal).sum()),time_limit_count=int(torch.stack(all_timeout).sum()),

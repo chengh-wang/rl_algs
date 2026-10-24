@@ -25,7 +25,8 @@ def main():
     p.add_argument('--epsilon',type=float,default=.05)
     args=p.parse_args();torch.set_num_threads(4);torch.manual_seed(17);dev='cuda:0'
     ck=torch.load(args.checkpoint,map_location='cpu',weights_only=False)
-    t=build_task(dev,args.motion_dir);task=G1FastSACTask(t.kin,t.motion,t.default_q)
+    t=build_task(dev,args.motion_dir)
+    task=G1FastSACTask(t.kin,t.motion,t.default_q,finite_reference=ck['cfg'].get('finite_reference',False))
     n=args.frames;groups=7
     native=G1TrackingEnv(task,n*groups,dev,eval_mode=True,seed=17)
     env=MjlabModelAdapter(native,task);runner=ModelBasedRunner(env,ck['cfg'],device=dev)
@@ -59,7 +60,10 @@ def main():
         delta=args.epsilon*d/d.square().mean(-1,keepdim=True).sqrt().clamp_min(1e-8)
         actions.extend((base+delta,base-delta))
     returns=torch.zeros(groups*n,device=dev);alive=torch.ones(groups*n,dtype=torch.bool,device=dev)
-    first_action=torch.cat(actions);survival=torch.zeros_like(returns)
+    first_action=torch.cat(actions);bounds=alg.actor.net.action_scale
+    outside=int((first_action.abs()>bounds).sum())
+    first_action=torch.maximum(torch.minimum(first_action,bounds),-bounds)
+    survival=torch.zeros_like(returns)
     try:
         with torch.no_grad():
             for step in range(args.steps):
@@ -80,6 +84,7 @@ def main():
         result=dict(checkpoint=str(args.checkpoint),iteration=ck['iter'],native_physics=True,auto_reset=False,
             phase_frames=frames.cpu().tolist(),paired_frames=n,groups=groups,rollout_steps=args.steps,
             epsilon_raw_action_rms=args.epsilon,baseline_return=float(r[0].mean()),gradient_l2_norm_mean=norms,
+            action_support=dict(clamped_coordinates=outside,all_applied_actions_in_actor_support=True),
             gradient_cosine=cosine,directional_physical_results=rows,
             caveats='Local finite perturbations at reference initial states; deterministic continuation; no training and no simulator differentiation.')
         args.output.parent.mkdir(parents=True,exist_ok=True);args.output.write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result,indent=2))

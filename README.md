@@ -4,9 +4,9 @@ Independent PyTorch package for **MBDAC** (model-based differentiable actor-crit
 
 Version 0.3 adds **MBDACFastSAC**: the pinned Holosoma FastSAC numerical actor/Q modules, real-only distributional Q fitting, and a short entropy-regularized world-model actor rollout. It is a model-based extension of **Holosoma FastSAC**, not the separate FlashSAC paper implementation. Existing MBDAC/MBDACAMP algorithms and checkpoints remain independent. Early 0.2 FastSAC prototypes omitted Q controller memory and are retained as debugging evidence, not valid method comparisons.
 
-The first corrected FastSAC+WM pilot completed 2000 updates but **did not learn full motion tracking**: the final policy triggers failure at 2.12 seconds of a 6-second reference. Numerical/interface validation below does not establish policy quality or a training speedup.
+**Version 0.3.1 now completes the small G1 tracking demo:** checkpoint1500 follows the full 6-second reference in native GPU physics without failure or automatic reset, with joint RMSE0.122rad and global body-position RMSE0.125m. Six distinct reference initial phases also complete their remaining motion. The failed earlier pilot is retained below; this is not a broad motion-library or speed benchmark.
 
-Version 0.3.1 continues debugging toward full physical tracking. It removes endpoint-only reference reset bins, gives finite reference completion explicit non-bootstrap semantics, adds an optional Q-only warmup gate, and batches model reward evaluation without changing its objective/gradients. The new goal and diagnostic evidence are recorded in [progress](doc/progress_2026-10-24.md#fastsac-world-model-debug-goal-active).
+Version 0.3.1 removes endpoint-only reference reset bins, gives finite reference completion explicit non-bootstrap semantics, adds an optional Q-only warmup gate, and batches model reward evaluation without changing its objective/gradients. Start with the [successful measured recipe](#successful-pure-model-actor-recipe-2026-10-24), which explicitly reuses a WM; diagnostic evidence is recorded in [progress](doc/progress_2026-10-24.md#fastsac-world-model-debug-goal).
 
 Experimental implementation with completed native **MJLab** training and measured comparisons. G1 motion tracking and AMP velocity learning run in 1024 `ManagerBasedRlEnv` worlds; full updates, physical evaluations, resume and SDK-free actor export are verified. Velocity quality is mixed and does not establish an overall speedup at equal quality. Other simulator backends have adapter/smoke evidence only and were not used for the current training.
 
@@ -107,8 +107,8 @@ Default schedule: initial 64 real steps; 500 WM-only outer iterations; then each
   --smoke --num-envs 1024 --iterations 3 --logger tensorboard \
   --log-dir logs/g1_wm_fastsac_smoke
 
-# Small pilot: original reference seconds 4--10, all networks initialized fresh.
-# Model BPTT batch stays 256; the real-state SAC branch uses a larger batch.
+# Historical failed pilot recipe (v5, source c104eef); retained for auditing.
+# Current finite-reference semantics differ, so this is not a bitwise rerun.
 .venv/bin/python -m examples.mjlab_g1.train_fast_sac \
   --num-envs 1024 --iterations 2000 --horizon 3 --compile \
   --critic-batch 8192 --real-actor-batch 8192 \
@@ -125,7 +125,7 @@ Default schedule: initial 64 real steps; 500 WM-only outer iterations; then each
 
 The subset records original/selected-file SHA256 and frame range; original data is never overwritten. `--start-seconds` selects another explicit window, `--critic-batch` changes only Q sampling volume, and `--wm-checkpoint` loads only a compatible native G1 physical model while leaving actor/Q/temperature fresh. `--wm-only-iters` sets its adaptation period. Report any previous WM training separately; a reused model is not a from-scratch speed result. Full resume checks the identical motion subset and algorithm recipe. Actor/Q math runs in FP32; the large WM uses the configured precision. Run length is an initial probe, not a convergence guarantee. Evaluate the actor in physical simulation and report WM fitting/collection/actor/Q costs together. New configs select `class_name="MBDACFastSAC"` through the same public runner. Full resume includes target Q, temperature/optimizer and update counters; actor-only inference/export needs no WM or simulator SDK. `load_cfg={"temperature": True}` selects a temperature warm start. Existing MBDAC checkpoints cannot directly initialize this different actor architecture.
 
-### Measured small pilot, 2026-10-24
+### Earlier unsuccessful pilot, 2026-10-24
 
 Run [uya7n6k7 on W&B](https://forge.coreweave.com/wandb/sslab_motion_mimic-teams/mbdac-fastsac-tracking/runs/uya7n6k7) used native MJLab 1.2.0 `ManagerBasedRlEnv`, 1024 worlds, one unchanged G1 LAFAN1 reference window (original seconds 4–10), seed 42, and the command above. Actor, Q and WM all started fresh. Training source was `c104eefc16e938517cd8abb5253244e0e16ea534`. The actor objective was explicitly **0.1 model / 0.9 real-state SAC**, with model horizon 3; this is not evidence for the default pure-model objective or an unchanged upstream recipe.
 
@@ -138,11 +138,55 @@ Both checkpoints below were evaluated on CUDA in native physics, from the same i
 | 1500 | 1.02 s | 1.002 rad | Failed |
 | 2000 | 2.12 s | 0.769 rad | Failed |
 
-The final policy remains unusable for complete tracking. Reward/episode-length curves recover late in training but do not establish convergence; no equal-quality speed advantage over MBDAC or PPO is established. Earlier incomplete-Q debugging runs consumed a further 3024.01 process seconds (50 min 24 s); those are not valid method comparisons. Debug runs v2/v3 borrowed an existing WM, whose original training cost is recorded separately; this final run did not reuse it.
+That pilot's final policy remains unusable for complete tracking. Reward/episode-length curves recover late in training but do not establish convergence; no equal-quality speed advantage over MBDAC or PPO is established. Earlier incomplete-Q debugging runs consumed a further 3024.01 process seconds (50 min 24 s); those are not valid method comparisons. Debug runs v2/v3 borrowed an existing WM, whose original training cost is recorded separately; v5 did not reuse it.
 
 Validation is separate from this unsuccessful policy result: 41 native-environment tests pass (one optional skip), and the installed wheel passes 40 tests without simulator SDKs (two optional skips). Checks include upstream H=0 actor loss/all-gradient equivalence, a complete C51 optimizer step, reset-safe noisy policy memory, previous-action Q state, frozen WM/Q parameters with live actor input gradients, update/resume semantics and legacy-checkpoint rejection. Native contract validation found zero policy-history reconstruction error and verified applied PD action/pre-reset physical transitions. Export of the actual final actor through `ModelBasedRunner.export_jit()` runs without MJLab/MuJoCo/Holosoma/RSL-RL; eager versus exported outputs match exactly for batches 1 and 16. These checks do not validate the learned policy's behavior.
 
 Local generated evidence (also uploaded to the W&B run): `logs/g1_wm_fastsac_v5_report/{summary.json,learning_curves.png}`, `logs/g1_wm_fastsac_v5_eval_{1500,2000}/{metrics.json,reference_left_policy_right.mp4}`, `logs/g1_wm_fastsac_v5_export/{policy.pt,audit.json}`, and `logs/fast_sac_native_contract.json`. These files are not required to install the wheel; checkpoints, data and generated logs remain outside source control.
+
+### Successful pure-model actor recipe, 2026-10-24
+
+[W&B run vn81zz42](https://forge.coreweave.com/wandb/sslab_motion_mimic-teams/mbdac-fastsac-tracking/runs/vn81zz42) uses the same unchanged reference window and 1024 native MJLab worlds. **Only the physical WM is loaded from v5/model2000; actor, Q and temperature start fresh.** The initialization audit confirms identical WM weights and unchanged freshly constructed actor/Q. The selected policy retains the original 99-dimensional proprioceptive observation, 10-frame history, 730-dimensional reference preview, 29 actions, XML, PD gains/scales and reward formulas. No teacher actor, direct reference action or post-inference smoothing is used.
+
+The measured recipe uses **100% model actor objective, H32**, WM batch128, actor batch256, real Q batch8192, actor LR5e-5, and raw-action std bounds0.05–0.8 (initial bound0.2). Initial64 collection steps and100 WM adaptation iterations precede800 real Q/temperature/EMA optimizer steps with the actor held fixed. Afterwards each outer iteration collects alternating2/3 vector steps, fits WM10times and Q4times, and updates the actor once. C51/temperature fitting remains real-only; no differentiable simulator is required. These are explicitly reported changes from the Holosoma WBT recipe and the earlier hybrid pilot.
+
+To reproduce this **WM warm-start** experiment, retain/download the physical-model checkpoint `model_2000.pt` from the earlier [v5 W&B run](https://forge.coreweave.com/wandb/sslab_motion_mimic-teams/mbdac-fastsac-tracking/runs/uya7n6k7), then run:
+
+```bash
+.venv/bin/python -m examples.mjlab_g1.train_fast_sac \
+  --num-envs 1024 --iterations 1500 --horizon 32 --critic-batch 8192 \
+  --wm-checkpoint logs/g1_wm_fastsac_v5/model_2000.pt --wm-only-iters 100 \
+  --critic-warmup-updates 800 --model-actor-weight 1 --actor-lr 5e-5 \
+  --policy-frequency 4 --start-seconds 4 --clip-seconds 6 \
+  --action-std-min 0.05 --action-std-max 0.8 --compile --compile-task \
+  --log-dir logs/g1_wm_fastsac_v6
+
+.venv/bin/python -m examples.mjlab_g1.evaluate \
+  logs/g1_wm_fastsac_v6/model_1500.pt \
+  --motion-dir logs/g1_wm_fastsac_v6/motion --seconds 6 --video-seconds 6 \
+  --continue-after-failure --save-trajectory --output logs/g1_wm_fastsac_v6_eval_1500
+
+.venv/bin/python -m examples.mjlab_g1.evaluate_phases \
+  logs/g1_wm_fastsac_v6/model_1500.pt --motion-dir logs/g1_wm_fastsac_v6/motion \
+  --start-seconds 0 1 2 3 4 5 --output logs/g1_wm_fastsac_v6_eval_phases_cli
+```
+
+Training source is `3583af415262e26432c40fffebfaeb0958b3b503`, seed42, on the recorded RTX4070 Laptop8GB environment. Subset SHA256 is `475d34cd9945c99d8a2dd38374cff83ad7c2b14a4cbac9c9faa55a2190680f5f`. Removing `--wm-checkpoint` initializes a new physical model and requires its own warmup/validation; that cold-start variant has not been benchmarked. Full resume uses `--resume` with the identical algorithm options and reference subset, instead of `--wm-checkpoint`.
+
+Matched native CUDA evaluations, no resets/noise/DR:
+
+| v6 checkpoint | Full6s without failure | Joint RMSE | Global body-position RMSE | Normalized return |
+| --- | --- | --- | --- | --- |
+| 1000 | Yes | 0.166rad | 1.141m | 0.711 |
+| 1500, selected | Yes | **0.122rad** | **0.125m** | **0.920** |
+
+The goal gates were full6s without failure, joint RMSE≤0.30rad and global body-position RMSE≤0.20m. The selected checkpoint passes all three. Its mean root world velocity is `[0.564, -0.033, -0.001] m/s`, versus reference `[0.584, -0.014, 0.004] m/s`. Six parallel worlds initialized at reference0–5s also finish their respective remaining6–1s, all below both RMSE gates. These are distinct initial phases of **one** clip, not six different motions or a disturbed-state robustness benchmark. No observation extension was retained.
+
+Checkpoint1500 took **1260.43s (21min00s)** of new active training, including adaptation/collection/Q warmup. The reused v5 model's entire source run cost1718.42s; their selected-checkpoint lineage totals**2978.85s (49min39s)**. The full v6 process was deliberately interrupted at1634 after1382.95active seconds (1406.55process seconds); `interrupted.pt` remains preserved, while the selected video/policy uses1500. W&B's interrupted-run state reflects this deliberate stop. Four extra H32 diagnostic/compile probes used about143.23active seconds, separately from earlier3024.01s incomplete-Q debugging. These times do not include all engineering/evaluation work. The earlier MBDAC4000 took3435.28s on a multi-motion library; this single-clip warm-start experiment does **not** establish an equal-task speed advantage.
+
+Checkpoint auditing verifies15,000new WM,5,600Q/temperature/EMA and1,200actor optimizer steps over3,905,536real transitions. Native tests:45passed/1optional skip; installed SDK-free wheel:43passed/3optional skips. The selected actor exports via the unchanged public runner, with eager/export output error0 at batches1/16 and no simulator SDK installed. A separate1024-world full-resume smoke restores the trained checkpoint and completes another optimizer iteration; the selected checkpoint is unchanged.
+
+Final evidence lives under `logs/g1_wm_fastsac_v6_report/`, `logs/g1_wm_fastsac_v6_eval_{1000,1500}/`, `logs/g1_wm_fastsac_v6_eval_phases_cli/`, and `logs/g1_wm_fastsac_v6_export/`, with copies uploaded to W&B. The MP4 labels reference playback on the left and actual native physics on the right. The saved trajectory is raw physical state, without smoothing. The result meets this small-demo goal; broad motion coverage and reward convergence are not certified.
 
 ## RSL-style use
 
