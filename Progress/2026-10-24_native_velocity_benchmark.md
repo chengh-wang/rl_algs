@@ -52,9 +52,12 @@
   3010 步的第一次训练后评估已逐指令达标，active process 309.97 s；6060 步稳定达标后结束，
   过程总计 641.41 s（含评估）。[W&B](https://forge.coreweave.com/wandb/sslab_motion_mimic-teams/mbdac-native-velocity/runs/ujc6scu7)。
 - `native_go1_wm_fastsac_v2`：旧 model-only 预实验约 16 分钟仍主要站立，停止并保留原始日志。
-- 修正世界坐标系力 head 所需的 yaw 信息后，正式运行 `native_go1_mbdac_v3`；
-  检查到约 36 分钟时 XY RMSE 为 0.427 m/s、yaw 为 0.036 rad/s，40 个评估世界全部存活，尚未达标。
-- 随后顺序运行 `native_go1_wm_fastsac_v3`、同接口的 `native_go1_real_only_v3` 对照，
+- 修正世界坐标系力 head 所需的 yaw 信息后，`native_go1_mbdac_v3` 已完成；
+  3520 次更新时首次观测逐指令达标（2451.07 s），XY 0.0525 m/s、yaw 0.0461 rad/s；
+  3940 次更新再次逐指令达标，XY 0.0431 m/s、yaw 0.0344 rad/s，按稳定验收条件停止。
+  总过程 2862.40 s（不含退出时的 W&B 同步），含同步的子进程完整耗时 2900.46 s。
+- 当前 `native_go1_wm_fastsac_v3` 已进入真实训练，1024 世界，启动阶段显存约 5.4 GB，无 OOM。
+  后续顺序运行同接口的 `native_go1_real_only_v3` 对照，
   以及 `native_g1_wm_fastsac_v3`。所有网络、replay 与 normalization 从零初始化。
 - v3 hybrid 使用与原版相同的 3e-4 actor LR；WM warmup 后使用 0.9 真实 SAC + 0.1 模型 H=8 梯度。
   主比较仍是完整算法配方的比较，不能把差异全部归因于 WM。
@@ -63,4 +66,8 @@
 它不覆盖已有 trial。每轮保存实际 source snapshot，最终从评估 JSONL 生成图。
 视频由实际 native GPU trajectory 渲染，不做 joint smoothing。
 
-当前不能宣称 WM+FastSAC 比原版更快：公平的另外两条曲线尚未完成。
+当前不能宣称 WM+FastSAC 比原版更快：第三条正式曲线、同接口对照及 G1 实验尚未完成。
+
+0.3.3 独立 wheel 验证：50 passed、5 个可选依赖跳过，28 个子模块不需要 simulator SDK。
+源码和 wheel 内全部 30 项源码/数据文件与 5 项许可证逐字节一致。
+SHA256：`1cca78c45fa242e0f7963c85bdcf1c2ea080aea15ba85ae93ce1311eadaf0bb9`。
