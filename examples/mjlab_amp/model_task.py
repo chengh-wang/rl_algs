@@ -41,7 +41,7 @@ class BaselineVelocityTask:
         self.reward_cfg={k:env.reward_manager.get_term_cfg(k) for k in env.reward_manager.active_terms if k!='_model_capture'}
         self.noise=torch.cat((torch.full((3,),.2),torch.full((3,),.05),torch.zeros(3),torch.full((29,),.01),
                               torch.full((29,),.5),torch.zeros(29))).to(self.device)
-        self.expert=None
+        self.expert=None; self._expert_iterator=None; self._expert_batch_size=None
 
     def normalize_context(self,x):
         return torch.cat(((x[...,:1]-.75)/.45,x[...,1:30]/.015,x[...,30:33]/.03),-1)
@@ -120,4 +120,13 @@ class BaselineVelocityTask:
             cfg=g1_amp_ppo_runner_cfg()
             self.expert=AMPLoader(cfg.amp_motion_files,cfg.amp_body_names,cfg.amp_anchor_name,
                                   self.env.scene['robot'].body_names,device=self.device)
-        return next(self.expert.feed_forward_generator(1,count))
+            self._expert_batches=cfg.algorithm.num_learning_epochs*cfg.algorithm.num_mini_batches
+        # Upstream cycles clips by batch index *inside* its generator. Creating
+        # a new generator for every update would silently sample only clip 0.
+        if self._expert_iterator is None or self._expert_batch_size!=count:
+            self._expert_iterator=self.expert.feed_forward_generator(self._expert_batches,count)
+            self._expert_batch_size=count
+        try: return next(self._expert_iterator)
+        except StopIteration:
+            self._expert_iterator=self.expert.feed_forward_generator(self._expert_batches,count)
+            return next(self._expert_iterator)

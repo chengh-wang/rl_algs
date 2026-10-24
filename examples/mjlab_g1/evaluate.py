@@ -84,6 +84,9 @@ def main():
                 reference=torch.cat((refq[:7],refq[13:42])).cpu().numpy()
                 actual_buffer.append(actual); reference_buffer.append(reference)
             active&=~native.last_failure & (step+1<horizon)
+            if (step+1)%1000==0:
+                print(json.dumps(dict(evaluation_step=step+1,maximum_steps=int(horizon.max()),
+                                      active_clips=int(active.sum()),failed_clips=int(failed.sum()))),flush=True)
             if not active.any(): break
         # Render after stepping, avoiding interference between renderer and GPU physics.
         for actual,reference in zip(actual_buffer,reference_buffer): video.append(actual,reference)
