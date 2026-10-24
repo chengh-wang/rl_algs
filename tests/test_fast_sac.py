@@ -224,3 +224,85 @@ def test_legacy_incomplete_q_checkpoint_cannot_silently_resume():
     old=alg.save();old.pop('fast_sac_state_version')
     with pytest.raises(ValueError,match='incomplete Q memory'):alg.load(old)
     alg.load(old,load_cfg={'world_model':True})
+
+
+def test_q_warmup_preserves_actor_and_resumes_update_gate(tmp_path):
+    cfg=config();cfg.fast_sac['critic_warmup_updates']=3
+    options={'algorithm':{'class_name':'MBDACFastSAC',**asdict(cfg)},'log_interval':1}
+    runner=ModelBasedRunner(ToyEnv(),options)
+    initial=copy.deepcopy(runner.alg.actor.state_dict())
+    runner.learn(1)
+    assert runner.alg.critic_updates==2 and runner.alg.actor_updates==0
+    # Statistics learn real observations, but no actor network parameter moves.
+    for k,v in initial.items():
+        if k.startswith('net.'): assert torch.equal(v,runner.alg.actor.state_dict()[k])
+    runner.save(tmp_path/'warmup.pt',include_replay=True)
+    resumed=ModelBasedRunner(ToyEnv(),options);resumed.load(tmp_path/'warmup.pt')
+    resumed.learn(1)
+    assert resumed.alg.critic_updates==4 and resumed.alg.actor_updates==1
+
+
+def test_finite_task_endpoint_suppresses_q_bootstrap_even_if_timeout():
+    env=ToyEnv();env.model_task=copy.deepcopy(env.model_task)
+    env.model_task.bootstrap_mask=lambda s,c:torch.tensor([1.,0.,1.,0.])
+    alg=MBDACFastSAC(env.model_task,4,config());fill(alg,env)
+    tr,hist,next_hist,c1=alg._real_batch(8)
+    tr['terminated'][:2]=True;tr['truncated'][2:]=True
+    alg._real_batch=lambda _: (tr,hist,next_hist,c1)
+    original=alg.target_critic.projection;seen=[]
+    def capture(features,actions,rewards,bootstrap,discount):
+        seen.append(bootstrap.clone());return original(features,actions,rewards,bootstrap,discount)
+    alg.target_critic.projection=capture;alg.update_real_critic()
+    expected=(~tr['terminated']).float()*tr['bootstrap']
+    assert torch.equal(seen[0],expected)
+    assert (seen[0][:2]==0).all()
+
+
+def test_batched_model_reward_matches_sequential_loss_and_actor_gradients():
+    env=ToyEnv();cfg=config(4);alg=MBDACFastSAC(env.model_task,4,cfg);fill(alg,env)
+    alg.task=copy.deepcopy(alg.task)
+    alg.task.termination_probability=lambda s,c,primitives=None:torch.sigmoid(s[:,0]*.3)
+    alg.update_world_model();start,h=alg._sample_starts();history=alg._history(h)
+    rng=torch.get_rng_state()
+    with frozen(alg.world_model,alg.critic):
+        batched,_=alg.actor_objective(start,history)
+        torch.set_rng_state(rng)
+        s=start['s'];cond=start['condition'];ctx=start['context'];prev=start['a_prev']
+        hist=history;alive=torch.ones(len(s));objective=torch.zeros_like(alive)
+        for j in range(cfg.horizon):
+            a,lp=alg.actor.sample(hist,alg.task.goal(cond))
+            s1=alg._wm_step(s,a,alg.task.normalize_context(ctx));c1=alg.task.advance(cond,state=s1,context=ctx)
+            r,d=alg._reward_and_termination(s1,c1,a,prev,s,ctx)
+            objective=objective+cfg.gamma**j*alive*(r-alg.log_alpha.exp().detach()*lp)
+            alive=alive*(1-d)
+            o=alg.task.add_noise(alg.task.observation(s1,a,ctx,c1,primitives=alg._primitives(s1,ctx)))
+            hist=torch.cat((hist[:,1:],o[:,None]),1);s,cond,prev=s1,c1,a
+        a,lp=alg.actor.sample(hist,alg.task.goal(cond))
+        value=alg.critic.value(alg._q_features(s,cond,ctx,prev,hist),a)
+        sequential=(objective+cfg.gamma**cfg.horizon*alive*(value-alg.log_alpha.exp().detach()*lp)).mean()
+        assert torch.allclose(batched,sequential,atol=1e-6)
+        ga=torch.autograd.grad(batched,tuple(alg.actor.parameters()),retain_graph=True)
+        gb=torch.autograd.grad(sequential,tuple(alg.actor.parameters()))
+        for a,b in zip(ga,gb):assert torch.allclose(a,b,atol=1e-6,rtol=1e-5)
+
+
+def test_reference_bins_exclude_terminal_only_reset_and_finite_goal_ends(tmp_path):
+    import pytest
+    pytest.importorskip('mujoco')
+    import numpy as np
+    from examples.mjlab_g1.motion import MotionLib
+    from examples.mjlab_g1.fast_sac import G1FastSACTask
+    class Kinematics:
+        q_lo=torch.full((29,),-3.);q_hi=-q_lo
+        def forward(self,p,R,v,w,q,qd):
+            return tuple(x[:,None].expand(-1,14,*x.shape[1:]) for x in [p,R,v,w])
+    rows=np.zeros((181,36));rows[:,2]=.75;rows[:,6]=1.
+    path=tmp_path/'walk.csv';np.savetxt(path,rows,delimiter=',')
+    motion=MotionLib([str(path)],Kinematics(),'cpu')
+    assert motion.num_frames==301 and motion.num_bins==6
+    assert (motion.bin_start<motion.clip_end[motion.bin_clip]).all()
+    assert motion.frame_bin[-1]==motion.frame_bin[-2]==5
+    task=G1FastSACTask(Kinematics(),motion,torch.zeros(29))
+    f=torch.tensor([0,299,300]);s=task.codec.pack(motion.ref_state(f))
+    assert torch.equal(task.bootstrap_mask(s,f),torch.tensor([1.,1.,0.]))
+    assert task.termination_probability(s,f)[-1]==1

@@ -19,7 +19,8 @@ FAST_SAC_DEFAULTS=dict(actor_hidden_dim=512,critic_hidden_dim=768,num_atoms=501,
     target_entropy_ratio=.5,tau=.05,critic_updates=4,policy_frequency=2,
     critic_batch=256,actor_grad_clip=1.,critic_grad_clip=0.,action_scale=1.,
     weight_decay=.001,alpha_weight_decay=.01,model_actor_weight=1.,
-    action_std_min=None,action_std_max=None,real_actor_batch=None)
+    action_std_min=None,action_std_max=None,real_actor_batch=None,
+    critic_warmup_updates=0)
 
 
 @dataclass
@@ -48,6 +49,8 @@ class MBDACFastSAC(MBDAC):
             raise ValueError('model_actor_weight must be in [0,1]')
         if f['real_actor_batch'] is not None and f['real_actor_batch']<1:
             raise ValueError('real_actor_batch must be positive')
+        if not isinstance(f['critic_warmup_updates'],int) or f['critic_warmup_updates']<0:
+            raise ValueError('critic_warmup_updates must be a nonnegative integer')
         if (f['action_std_min'] is None)!=(f['action_std_max'] is None):
             raise ValueError('Specify both raw-action standard deviation bounds')
         if f['action_std_min'] is not None:
@@ -104,6 +107,10 @@ class MBDACFastSAC(MBDAC):
         next_obs=torch.where(dones.bool()[:,None],terminal_obs,obs['actor'])
         tr.update(actor_observation=self.history[:,-1].clone(),
                   next_actor_observation=next_obs.clone(),condition1=c1.clone())
+        # Task completion can be reported as an environment timeout while still
+        # being a true finite-horizon endpoint (unlike an arbitrary time limit).
+        if hasattr(self.task,'bootstrap_mask') and 'bootstrap' not in tr:
+            tr['bootstrap']=self.task.bootstrap_mask(tr['s1'],c1).detach().clone()
         current=self._q_features(tr['s'],tr['condition'],tr['context'],tr['a_prev'],self.history)
         next_history=torch.cat((self.history[:,1:],next_obs[:,None]),1)
         future=self._q_features(tr['s1'],c1,tr['context'],tr['a'],next_history)
@@ -145,6 +152,7 @@ class MBDACFastSAC(MBDAC):
             action1,logp1=self.actor.sample(next_hist,self.task.goal(cond1))
             # True terminations stop bootstrap; time limits keep the physical s1.
             bootstrap=(~tr['terminated'].bool()).float()
+            if 'bootstrap' in tr: bootstrap=bootstrap*tr['bootstrap'].float()
             targets=self.target_critic.projection(next_features,action1,
                 tr['reward']-self.cfg.gamma*bootstrap*self.log_alpha.exp()*logp1,
                 bootstrap,self.cfg.gamma)
@@ -172,23 +180,37 @@ class MBDACFastSAC(MBDAC):
         """Return differentiable mean finite-horizon soft return; starts are fixed."""
         s=start['s']; cond=start['condition']; ctx=start['context']; previous=start['a_prev']
         hist=history; alive=torch.ones(len(s),device=self.device); objective=torch.zeros_like(alive)
-        entropies=[]; rewards=[]
+        entropies=[]; actions=[]; previous_actions=[]; states=[s]; conditions=[cond]
         for t in range(self.cfg.horizon):
             action,logp=self.actor.sample(hist,self.task.goal(cond))
             s1=self._wm_step(s,action,self.task.normalize_context(ctx))
             cond1=self.task.advance(cond,state=s1,context=ctx)
-            r,d=self._reward_and_termination(s1,cond1,action,previous,s,ctx)
-            objective=objective+self.cfg.gamma**t*alive*(r-self.log_alpha.exp().detach()*logp)
-            alive=alive*(1-d)
             obs=self.task.add_noise(self.task.observation(s1,action,ctx,cond1,primitives=self._primitives(s1,ctx)))
             hist=torch.cat((hist[:,1:],obs[:,None]),1)
+            states.append(s1);conditions.append(cond1);actions.append(action);previous_actions.append(previous)
             s,cond,previous=s1,cond1,action
-            entropies.append(-logp); rewards.append(r)
+            entropies.append(-logp)
+        rewards=None
+        if self.cfg.horizon:
+            # Analytic task heads are pure batched functions. Evaluate FK/reward
+            # once over H*B, as in MBDAC, instead of launching them H times.
+            flat=lambda rows:torch.stack(rows).flatten(0,1)
+            contexts=ctx[None].expand(self.cfg.horizon,*ctx.shape).flatten(0,1)
+            rewards,d=self._reward_term(flat(states[1:]),flat(conditions[1:]),flat(actions),flat(previous_actions),flat(states[:-1]),contexts)
+            rewards=rewards.reshape(self.cfg.horizon,-1);d=d.reshape_as(rewards)
+            survival=torch.cumprod(1-d,dim=0)
+            before=torch.cat((torch.ones_like(survival[:1]),survival[:-1]),0)
+            discounts=self.cfg.gamma**torch.arange(self.cfg.horizon,device=self.device)[:,None]
+            objective=(discounts*before*(rewards+self.log_alpha.exp().detach()*torch.stack(entropies))).sum(0)
+            alive=survival[-1]
         terminal_action,terminal_logp=self.actor.sample(hist,self.task.goal(cond))
         value=self.critic.value(self._q_features(s,cond,ctx,previous,hist),terminal_action)
-        objective=objective+self.cfg.gamma**self.cfg.horizon*alive*(value-self.log_alpha.exp().detach()*terminal_logp)
+        bootstrap=self.cfg.gamma**self.cfg.horizon*alive*(value-self.log_alpha.exp().detach()*terminal_logp)
+        objective=objective+bootstrap
         entropies.append(-terminal_logp)
-        return objective.mean(),dict(imagined_reward=float(torch.stack(rewards).detach().mean()) if rewards else 0.,
+        return objective.mean(),dict(imagined_reward=float(rewards.detach().mean()) if rewards is not None else 0.,
+            imagined_soft_reward=float((rewards+self.log_alpha.exp().detach()*torch.stack(entropies[:-1])).detach().mean()) if rewards is not None else 0.,
+            imagined_bootstrap=float(bootstrap.detach().mean()),
             imagined_survival=float(alive.detach().mean()),entropy=float(torch.stack(entropies).detach().mean()))
 
     def update_actor(self):
@@ -229,7 +251,9 @@ class MBDACFastSAC(MBDAC):
         c=self.cfg;rows=[]
         for _ in range(c.fast_sac['critic_updates']):
             row=self.update_real_critic()
-            if self.critic_updates%c.fast_sac['policy_frequency']==0: row.update(self.update_actor())
+            if (self.critic_updates>c.fast_sac['critic_warmup_updates'] and
+                    self.critic_updates%c.fast_sac['policy_frequency']==0):
+                row.update(self.update_actor())
             rows.append(row)
         return {key:sum(r[key] for r in rows if key in r)/sum(key in r for r in rows)
                 for key in set().union(*(r.keys() for r in rows))}

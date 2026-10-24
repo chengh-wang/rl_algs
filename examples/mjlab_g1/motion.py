@@ -74,7 +74,10 @@ class MotionLib:
         # 1 s bins
         bin_clip, bin_start = [], []
         for c in range(len(lens)):
-            nb = int(np.ceil(lens[c] / BIN_FRAMES))
+            # The final frame is an endpoint, not a start with a transition.
+            # E.g. 301 frames span 300 transitions: six bins, not a seventh
+            # degenerate bin that resets at the endpoint and times out at once.
+            nb = int(np.ceil((lens[c] - 1) / BIN_FRAMES))
             for b in range(nb):
                 bin_clip.append(c)
                 bin_start.append(int(self.clip_start[c]) + b * BIN_FRAMES)
@@ -87,6 +90,7 @@ class MotionLib:
             s = bin_start[b]
             e = min(s + BIN_FRAMES, int(self.clip_end[c]) + 1)
             self.frame_bin[s:e] = b
+        self.frame_bin[self.clip_end] = self.frame_bin[self.clip_end-1]
 
     @staticmethod
     def from_dir(path: str, kin: G1Kinematics, device: str) -> MotionLib:

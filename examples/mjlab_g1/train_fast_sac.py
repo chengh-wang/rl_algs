@@ -57,13 +57,17 @@ def main():
     group.add_argument('--wm-checkpoint',type=Path,help='Warm-start only a compatible G1 physical WM; actor/Q/temperature start fresh')
     p.add_argument('--critic-batch',type=int)
     p.add_argument('--real-actor-batch',type=int,help='Real-state SAC batch independent of the memory-limited WM actor batch')
+    p.add_argument('--critic-warmup-updates',type=int,help='Fit this many real Q updates before enabling the actor')
+    p.add_argument('--actor-lr',type=float)
+    p.add_argument('--policy-frequency',type=int,help='Actor update interval measured in Q updates')
     p.add_argument('--wm-only-iters',type=int)
     p.add_argument('--model-actor-weight',type=float)
     p.add_argument('--log-std-min',type=float)
     p.add_argument('--log-std-max',type=float)
     p.add_argument('--action-std-min',type=float,help='Exploration std in raw WM/replay control units')
     p.add_argument('--action-std-max',type=float,help='Exploration std upper bound in raw WM/replay control units')
-    p.add_argument('--compile',action='store_true');p.add_argument('--smoke',action='store_true')
+    p.add_argument('--compile',action='store_true');p.add_argument('--compile-task',action='store_true')
+    p.add_argument('--smoke',action='store_true')
     args=p.parse_args()
     if (args.action_std_min is not None or args.action_std_max is not None) and (args.log_std_min is not None or args.log_std_max is not None):
         p.error('Choose raw-action std bounds or pre-tanh log-std bounds, not both')
@@ -76,13 +80,21 @@ def main():
     task=G1FastSACTask(kin,motion,torch.tensor(default_joint_pos_list(),device=args.device))
     cfg=training_config(task,args.horizon,args.compile,args.logger,args.log_dir.name)
     cfg.update(seed=args.seed,num_envs=args.num_envs,motion_dir=str(motion_file.parent.resolve()))
+    cfg['finite_reference']=True
     if args.critic_batch is not None: cfg['algorithm']['fast_sac']['critic_batch']=args.critic_batch
     if args.real_actor_batch is not None: cfg['algorithm']['fast_sac']['real_actor_batch']=args.real_actor_batch
+    if args.critic_warmup_updates is not None: cfg['algorithm']['fast_sac']['critic_warmup_updates']=args.critic_warmup_updates
+    if args.actor_lr is not None: cfg['algorithm']['fast_sac']['actor_lr']=args.actor_lr
+    if args.policy_frequency is not None: cfg['algorithm']['fast_sac']['policy_frequency']=args.policy_frequency
+    if args.compile_task:cfg['algorithm']['compile_task']=True
     if args.wm_only_iters is not None: cfg['algorithm']['wm_only_iters']=args.wm_only_iters
     for name in ('model_actor_weight','log_std_min','log_std_max','action_std_min','action_std_max'):
         value=getattr(args,name)
         if value is not None: cfg['algorithm']['fast_sac'][name]=value
     cfg['initialized_from']='scratch'
+    if args.resume:
+        cfg['initialized_from']=dict(full_checkpoint=str(args.resume.resolve()),
+            sha256=hashlib.sha256(args.resume.read_bytes()).hexdigest())
     if args.wm_checkpoint:
         cfg['initialized_from']=dict(world_model=str(args.wm_checkpoint.resolve()),
             sha256=hashlib.sha256(args.wm_checkpoint.read_bytes()).hexdigest(),actor='scratch',critic='scratch')
@@ -97,6 +109,8 @@ def main():
     try:
         if args.resume:
             saved=torch.load(args.resume,map_location='cpu',weights_only=False)
+            if saved['cfg'].get('finite_reference',False)!=cfg['finite_reference']:
+                raise ValueError('Reference endpoint semantics changed; use a new run with a WM-only warm start')
             previous=Path(saved['cfg']['motion_dir'])/motion_file.name
             if not previous.is_file() or previous.read_bytes()!=motion_file.read_bytes():
                 raise ValueError('Full resume requires the identical reference subset; use a WM-only warm start for another clip')

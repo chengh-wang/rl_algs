@@ -7,6 +7,18 @@ from .robot import G1_JOINT_NAMES, action_scale
 class G1FastSACTask(G1ModelTask):
     critic_dim=G1ModelTask.critic_dim+1
 
+    def __init__(self,*args,finite_reference=True,**kwargs):
+        super().__init__(*args,**kwargs)
+        self.finite_reference=finite_reference
+
+    def bootstrap_mask(self,state,condition):
+        if not self.finite_reference:return torch.ones(len(state),device=state.device)
+        return (condition<self.motion.clip_end[self.motion.clip_id[condition]]).float()
+
+    def termination_probability(self,state,condition,primitives=None):
+        physical=super().termination_probability(state,condition,primitives)
+        return 1-(1-physical)*self.bootstrap_mask(state,condition)
+
     def critic_features(self, state, condition, context, primitives=None):
         physical=super().critic_features(state,condition,context,primitives)
         # Privileged Q needs the exact reference-clock state, not only a finite

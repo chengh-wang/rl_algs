@@ -57,7 +57,7 @@ def main():
     task=build_task(args.device,args.motion_dir); motion=task.motion; n=len(motion.names)
     if ck['cfg']['algorithm']['class_name'].split(':')[-1]=='MBDACFastSAC':
         from .fast_sac import G1FastSACTask
-        task=G1FastSACTask(task.kin,task.motion,task.default_q)
+        task=G1FastSACTask(task.kin,task.motion,task.default_q,finite_reference=ck['cfg'].get('finite_reference',False))
     native=G1TrackingEnv(task,n,args.device,eval_mode=True); env=MjlabModelAdapter(native,task)
     native._fixed_frames=motion.clip_start.clone(); native.reset()
     runner=ModelBasedRunner(env,ck['cfg'],device=args.device)
