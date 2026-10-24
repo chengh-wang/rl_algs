@@ -240,6 +240,17 @@ Use the existing MJLab environment; the baseline setup installs only the
 original Holosoma learner and its imported dependencies, without replacing
 Torch, CUDA or MJLab:
 
+For a fresh system, the complete tested dependency set including the baseline
+imports is pinned in `requirements-native-velocity.lock.txt`:
+
+```bash
+uv venv --python 3.11 .venv
+uv pip install --python .venv/bin/python -r requirements-native-velocity.lock.txt
+uv pip install --python .venv/bin/python --no-deps -e .
+```
+
+Then install the pinned source learner and launch the trials:
+
 ```bash
 bash scripts/setup_native_velocity_baseline.sh
 .venv/bin/python -m examples.mjlab_velocity.train --robot go1 --method fastsac --num-envs 1024 --iterations 100000 --compile --log-dir logs/native_go1_fastsac_v2
