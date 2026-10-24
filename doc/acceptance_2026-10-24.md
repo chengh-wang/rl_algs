@@ -15,11 +15,11 @@ evidence inventory, not a declaration that all policies are successful.
 | Native manager-based MJLab | Native task factories and `ManagerBasedRlEnv` step/managers retained; real 1024-world runs and videos | Verified |
 | Other framework adapter | `IsaacLabModelAdapter` delegates the RSL wrapper; earlier real Cartpole terminal/resume/export smoke in `logs/isaac_cartpole_validation/validation.json` | Bridge/smoke evidence retained; further Isaac Lab training deferred by user |
 | G1 motion-tracking learning, physics and video | 4000 video/time (3435.28 s); 5000 full-clip evaluation completes 26/40 clips; `logs/eval_4000`, `logs/eval_5000_full` and W&B | Actual policy learned; no claim of solving all clips |
-| Action scale, FK, reward and observation order | G1 native validation and velocity reward/FK/AMP-feature validation; native actor values copied exactly | Verified original checks; stronger analytic-versus-native observation check is added but awaits its serial GPU run |
+| Action scale, FK, reward and observation order | G1 native validation; `logs/velocity_validation_full_observations.json`: gyro error 1.67e-6, gravity 2.38e-7, remaining actor channels 0; reward/FK/terminal checks pass | Verified on actual native states; no IMU/body-frame mismatch found |
 | AMP discriminator and actor style gradient | Generic isolation/style-gradient tests; native smoke updates; task-owned source-prior factory; source reward/optimizer/normalizer/checkpoint parity test | Implemented; module parity is not policy success |
 | AMP real training and matched PPO comparison | Independent-prior checkpoints 1000–4000 evaluated with same five 20 s commands/seed/task; `logs/velocity_comparison_4000` | Measured negative result: no matched-quality speed advantage |
-| Source-prior real training/comparison | `logs/velocity_mbdacamp_upstream_1024_v1`, source prior from pinned fork, actual finite updates | **Pending** final physical metrics, video and complete cost report |
-| Checkpoint portability and export | Trained G1 4000 / AMP 2000 actor export max absolute difference 0; numeric source-normalizer checkpoint state; CPU/GPU partial reset smoke | Verified existing artifacts; export latest source-prior actor after its evaluation |
+| Source-prior real training/comparison | 3000 completed and evaluated against the retained PPO in both body and native reward frames; `logs/velocity_comparison_upstream_3000` | Body forward error improves 0.804 to 0.307 from 2000 to 3000 but remains above PPO 0.158; **continuing to 5000**, not yet accepted |
+| Checkpoint portability and export | Trained G1 4000 / AMP 2000 / source-prior AMP3000 export max absolute difference 0; `logs/velocity_upstream_3000_export/export.json` loads without simulator or RSL; numeric normalizer checkpoint; CPU/GPU partial reset smoke | Verified through the evaluated 3000 checkpoint |
 | Fresh-start instructions, versions and provenance | README, pinned lock/data fetch, isolated AMP setup, `licenses/PROVENANCE.md`, dependency-metadata exception documented | Provided; source examples run from repository root |
 | Preserve previous work | Old G1/PPO experiments, failed compilation, all independent-prior checkpoints/videos remain; no remote/push | Preserved |
 
@@ -28,8 +28,9 @@ training is scheduled. Contact/catching is a future task: the package provides
 physical-signal routing, not a claim that arbitrary Python rewards can be
 automatically differentiated without state/measurement definitions.
 
-Before completion: finish and physically evaluate the current source-prior run;
-execute the strengthened observation validator after releasing the training GPU;
-export that trained actor without simulator/RSL SDKs; upload measurements/video
-and update the comparison/progress documents. Interpret negative results openly;
+Before completion: finish and physically evaluate the current source-prior
+continuation to 5000; export its selected actor without simulator/RSL SDKs;
+upload measurements/video and update the comparison/progress documents.
+The strengthened native observation validator and source-prior 3000 export pass.
+Interpret negative results openly;
 neither duration alone nor finite losses prove successful command control.

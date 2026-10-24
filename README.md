@@ -101,6 +101,11 @@ numerical module parity and native smoke tests pass, while learning quality for
 that variant remains under evaluation. Existing checkpoints retain their legacy
 prior automatically. See the benchmark guide before changing prior backends.
 
+The [source-prior 3000 evaluation](doc/velocity_upstream_results_2026-10-24.md)
+shows improving forward motion, with body XY RMSE 0.307 m/s versus PPO's 0.158.
+It is still below the baseline's forward quality; the same AMP configuration
+continues toward 5000. Body and native torso-reward-frame errors are separate.
+
 ## Design contract
 
 - Core learning code imports neither MJLab nor Isaac Lab.
