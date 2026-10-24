@@ -1,6 +1,6 @@
 # Upstream-prior AMP velocity results (2026-10-24)
 
-Status: 3000 evaluated; same configuration continues toward 5000. The package and numerical integration work, but command-control quality is **not accepted** and matched-quality speedup is **not established**.
+Status: source-prior training through 5000 and matched physical evaluations are complete. The package and numerical integration work, but command-control quality is **not accepted** and matched-quality speedup is **not established**.
 
 ## Method and evaluation
 
@@ -41,3 +41,34 @@ The strengthened 32-world native validator passes: gyro reconstruction max absol
 Evidence: `logs/velocity_eval_upstream_{2000,3000}/evaluation.json`, `logs/velocity_eval_ppo_1500_frames/evaluation.json`, `logs/velocity_comparison_upstream_3000/comparison.json`, `logs/velocity_validation_full_observations.json`, `logs/velocity_upstream_3000_export/export.json`.
 
 [Training run](https://forge.coreweave.com/wandb/sslab_motion_mimic-teams/mbdac-velocity/runs/yls5tbj3). Continuation restores all trained networks, optimizers and prior normalizer state; no prior reset, new reward or extra MBDAC-only training.
+
+
+## Final 4000 / 5000 outcomes
+
+The source-prior experiment completed 5000. The 4000 forward body-frame XY/yaw
+RMSE is 0.1544 m/s / 0.2978 rad/s, close to PPO 0.1581 / 0.3379 in this one probe.
+Its native torso-frame errors and slip are worse, so this is not equal overall
+quality. At 5000 the gait lifts its feet more and backward tracking improves to
+body XY RMSE 0.1408 m/s versus PPO 0.3994. Forward body vx overshoots to 0.919 m/s
+for a 0.8 request; body XY RMSE 0.2272, native torso XY/yaw 0.1887 / 0.3112.
+Lateral and turning commands remain weak. All five cases survive 20 s.
+
+Cost through the source-prior 5000 checkpoint is 3985.74 s (66.43 min), including
+WM warmup, failed compilation, launches and replay refill. Other recorded
+independent-prior prototypes add 2798.22 s, giving 113.07 min combined recorded
+training cost; engineering/evaluation/smoke checks are excluded. PPO's retained
+1500 checkpoint cost 136.62 min. No overall matched-quality speedup is established.
+
+Actual optimizer states confirm WM 50,000 / actor 4,500 / D 4,500 / critic 90,000
+updates, and actor/WM normalizer counts match 12,996,608 real transitions. The
+5000 actor loads and exports without simulator/RSL SDKs, maximum output error 0.
+Regression suites finish with 28 native-dependency tests passed and 26 installed-
+wheel tests passed / 2 optional dependency tests skipped.
+
+See [the final delivery report](final_report_2026-10-24.md),
+`logs/velocity_comparison_upstream_5000/comparison.json`,
+`logs/velocity_upstream_5000_optimizer_audit.json`, and
+`logs/velocity_upstream_5000_export/export.json`.
+No additional training process remains running. These results complete the
+implementation and measured comparison; reliable all-command control is not
+claimed.

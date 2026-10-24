@@ -1,4 +1,6 @@
-# Native MJLab AMP velocity comparison (2026-10-24)
+# Historical independent-prior velocity comparison (2026-10-24)
+
+Final source-provider results are in [the delivery report](final_report_2026-10-24.md). The prototype history below is retained.
 
 Status: the independent-prior trial completed 4000 MBDACAMP iterations and five matched physical evaluations. A follow-up now reuses the upstream prior modules directly. Velocity tracking and gait quality remain below the retained PPO forward-walking baseline; no speed advantage at matched quality is established.
 

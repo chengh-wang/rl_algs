@@ -2,7 +2,7 @@
 
 Independent PyTorch package for **MBDAC** (model-based differentiable actor-critic) and **MBDACAMP** (the same learner with an AMP motion prior). The public runner follows RSL-RL conventions. Simulator gradients are not required.
 
-Implementation is in progress. The current training and acceptance work uses **MJLab**, with native `ManagerBasedRlEnv` physics and managers. G1 tracking runs in 1024 parallel environments; full-network updates, physical evaluation, checkpoint resume and export have passed. Policy quality is still being evaluated. Other simulator backends are outside the current training scope.
+Experimental implementation with completed native **MJLab** training and measured comparisons. G1 motion tracking and AMP velocity learning run in 1024 `ManagerBasedRlEnv` worlds; full updates, physical evaluations, resume and SDK-free actor export are verified. Velocity quality is mixed and does not establish an overall speedup at equal quality. Other simulator backends have adapter/smoke evidence only and were not used for the current training.
 
 ## Fresh installation (Linux, NVIDIA GPU)
 
@@ -59,7 +59,7 @@ The first 500 iterations fit the world model. Later iterations continue fitting 
 
 Evaluation writes an MP4 and per-clip survival, return, joint RMSE and body-position RMSE, plus one-step/eight-step model errors in physical units on newly collected evaluation transitions. These diagnostics do not update model parameters or normalization. A 20-second prefix is identified as a prefix; it is not reported as full-clip success. Domain randomization and sensor noise are disabled for this evaluation. Training uses the supplied reference implementation's reset noise, friction/COM/calibration randomization, reward formulas, joint order, PD gains and per-joint action scales.
 
-`--algorithm MBDACAMP` enables the additional adversarial prior. That extension has CPU gradient-isolation tests and a native 1024-world interface check; native learning quality remains unverified. Its discriminator uses real policy transitions and motion reference pairs, while its style reward contributes gradients through imagined actor rollouts. This is an extension to SuperMimic, not a claim that its reference code already contains AMP imitation learning.
+`--algorithm MBDACAMP` enables the additional adversarial prior. That extension has gradient-isolation tests and actual native 1024-world learning/evaluations; measured velocity quality remains limited. Its discriminator uses real policy transitions and motion reference pairs, while its style reward contributes gradients through imagined actor rollouts. This is an extension to SuperMimic, not a claim that its reference code already contains AMP imitation learning.
 
 ## RSL-style use
 
@@ -89,7 +89,7 @@ See the [update schedule audit](doc/update_schedule_audit.md) for the exact 10 W
 
 The [MBDAC review](doc/mbdac_audit_2026-10-24.md) records numerical equivalence, replay-resume fixes, trained-policy export and measured optimization. For new task rewards, [PhysicalSignals](doc/general_task_interface.md) selects analytic quantities first and automatically declares/captures missing physical heads.
 
-The observed velocity baseline used a different task, AMP+PPO and hardware load. Timing a few tracking updates does not establish an advantage over that baseline. The [matched velocity benchmark](doc/velocity_benchmark.md) reuses the retained baseline's native MJLab task and expert loader; native learning quality and speed comparisons remain acceptance items. See [current measured progress](doc/progress_2026-10-24.md).
+The observed velocity baseline used a different task, AMP+PPO and hardware load. Timing a few tracking updates does not establish an advantage over that baseline. The [matched velocity benchmark](doc/velocity_benchmark.md) reuses the retained baseline's native MJLab task and expert loader; actual training duration and physical quality are reported separately. See [current measured progress](doc/progress_2026-10-24.md).
 
 The first [matched AMP results](doc/velocity_results_2026-10-24.md) include actual
 1000–4000 checkpoint evaluations of the independent prior. Survival improves,
@@ -97,14 +97,15 @@ but no checkpoint matches PPO's forward tracking quality; 4000 shuffles too
 slowly. The shorter training time is therefore not an advantage at matched
 policy quality. New native velocity runs directly reuse the upstream fork's
 discriminator/normalizer/gradient penalty through a task-owned prior factory;
-numerical module parity and native smoke tests pass, while learning quality for
-that variant remains under evaluation. Existing checkpoints retain their legacy
+numerical module parity, native smoke tests and actual training through 5000
+are evaluated in the final report. Existing checkpoints retain their legacy
 prior automatically. See the benchmark guide before changing prior backends.
 
 The [source-prior 3000 evaluation](doc/velocity_upstream_results_2026-10-24.md)
 shows improving forward motion, with body XY RMSE 0.307 m/s versus PPO's 0.158.
-It is still below the baseline's forward quality; the same AMP configuration
-continues toward 5000. Body and native torso-reward-frame errors are separate.
+The completed 5000 run improves gait and backward tracking, with mixed forward
+quality; lateral/turning remain weak. Body and native torso-reward-frame errors
+are separate. See [final delivery and comparison](doc/final_report_2026-10-24.md).
 
 ## Design contract
 

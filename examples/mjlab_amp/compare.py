@@ -52,6 +52,11 @@ def main():
             raise ValueError('Previous process duration must be finite and nonnegative')
         timing['candidate_previous_process_s']=prior_seconds
         timing['candidate_total_process_to_checkpoint_s']=prior_seconds+timing['candidate_launch_to_checkpoint_s']
+        other_seconds=launch.get('other_experiment_process_seconds',launch.get('other_independent_prior_prototype_process_seconds',0.))
+        if not isinstance(other_seconds,(int,float)) or not np.isfinite(other_seconds) or other_seconds<0:
+            raise ValueError('Other recorded experiment duration must be finite and nonnegative')
+        timing['candidate_other_recorded_prototype_process_s']=other_seconds
+        timing['candidate_lineage_plus_recorded_prototypes_s']=timing['candidate_total_process_to_checkpoint_s']+other_seconds
         if launch.get('resume_checkpoint'):
             timing['candidate_resume_checkpoint']=launch['resume_checkpoint']
     result=dict(baseline_evaluation=str(args.baseline.resolve()),candidate_evaluation=str(args.candidate.resolve()),
@@ -64,7 +69,8 @@ def main():
         caveats=['Report different training environment/batch counts and policy architectures.',
                  'Two checkpoints alone do not establish time to matched quality.',
                  'Missing RMSE means insufficient pre-failure steady data, not zero error.',
-                 'Launch costs include setup/compilation; trainer elapsed excludes environment construction.'])
+                 'Launch costs include setup/compilation; trainer elapsed excludes environment construction.',
+                 'Other recorded prototype costs are separate from checkpoint lineage; engineering, evaluation and smoke checks are not included unless explicitly recorded.'])
     args.output.mkdir(parents=True,exist_ok=True)
     (args.output/'comparison.json').write_text(json.dumps(result,indent=2)+'\n')
     def number(value): return '—' if value is None else f'{value:.4f}'

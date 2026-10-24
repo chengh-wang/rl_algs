@@ -11,12 +11,13 @@ bash scripts/setup_amp_benchmark.sh /path/to/AMP_mjlab
 .venv-amp/bin/python -m examples.mjlab_amp.train --algorithm MBDAC \
   --num-envs 16 --iterations 2 --smoke --logger tensorboard \
   --log-dir logs/velocity_interface
+.venv-amp/bin/wandb login
 .venv-amp/bin/python -m examples.mjlab_amp.train --algorithm MBDACAMP \
-  --num-envs 1024 --iterations 2000 --compile --log-dir logs/velocity_mbdacamp_1024
+  --num-envs 1024 --iterations 5000 --compile --log-dir logs/velocity_mbdacamp_1024
 .venv-amp/bin/python -m examples.mjlab_amp.validate
 # Both the new actor and retained PPO checkpoint use this same evaluator.
 .venv-amp/bin/python -m examples.mjlab_amp.evaluate \
-  logs/velocity_mbdacamp_1024/model_2000.pt --seconds 20 --video \
+  logs/velocity_mbdacamp_1024/model_5000.pt --seconds 20 --video \
   --model-diagnostics --output logs/velocity_evaluation
 .venv-amp/bin/python -m examples.mjlab_amp.evaluate /path/to/ppo_model_1500.pt \
   --seconds 20 --video --output logs/ppo_evaluation
@@ -121,3 +122,21 @@ architecture without `--reset-prior` is rejected by strict checkpoint loading.
 discriminator optimizer step and normalization statistics against the actual
 fork, then checks checkpoint restoration. The native 1024-world smoke run is an
 interface check, not evidence of improved policy quality.
+
+
+## Completed local experiment
+
+The native example now defaults to5000 iterations, reflecting the observed time
+needed for a visible gait in this configuration; it is not a convergence or
+quality guarantee. Source-prior4000 has forward body errors near PPO in one
+probe, but worse native torso errors/slip. Source-prior5000 improves gait and
+backward tracking, overshoots forward speed and remains weak laterally/turning.
+See [the final report](final_report_2026-10-24.md). Actual policy outcomes are
+measured separately from numerical integration checks.
+
+Launch metadata may include `other_experiment_process_seconds` (or the older
+`other_independent_prior_prototype_process_seconds`). `compare` reports this
+separately from checkpoint lineage and also reports their sum. Those recorded
+training costs exclude engineering/evaluation/smoke checks unless explicitly
+included. This prevents hidden prototype cost from being mistaken for a
+cold-start runtime improvement.

@@ -12,7 +12,7 @@ from .model_task import BaselineVelocityTask
 
 def main():
     p=argparse.ArgumentParser()
-    p.add_argument('--num-envs',type=int,default=1024); p.add_argument('--iterations',type=int,default=2000)
+    p.add_argument('--num-envs',type=int,default=1024); p.add_argument('--iterations',type=int,default=5000)
     p.add_argument('--algorithm',choices=['MBDAC','MBDACAMP'],default='MBDACAMP')
     p.add_argument('--log-dir',type=Path,default=Path('logs/velocity_mbdacamp_1024'))
     p.add_argument('--device',default='cuda:0'); p.add_argument('--seed',type=int,default=42)
