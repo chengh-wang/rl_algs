@@ -38,6 +38,15 @@ def main():
         timing['candidate_launch_to_checkpoint_s']=Path(candidate['checkpoint']).stat().st_mtime-launch['started_unix']
         timing['candidate_training_source_commit']=launch['source_commit']
         if timing['candidate_launch_to_checkpoint_s']<0: raise ValueError('Checkpoint predates candidate launch')
+        # A resumed run's trainer clock excludes failed work after its last
+        # checkpoint. Include the measured previous process cost explicitly.
+        prior_seconds=launch.get('prior_process_seconds',0.)
+        if not isinstance(prior_seconds,(int,float)) or not np.isfinite(prior_seconds) or prior_seconds<0:
+            raise ValueError('Previous process duration must be finite and nonnegative')
+        timing['candidate_previous_process_s']=prior_seconds
+        timing['candidate_total_process_to_checkpoint_s']=prior_seconds+timing['candidate_launch_to_checkpoint_s']
+        if launch.get('resume_checkpoint'):
+            timing['candidate_resume_checkpoint']=launch['resume_checkpoint']
     result=dict(baseline_evaluation=str(args.baseline.resolve()),candidate_evaluation=str(args.candidate.resolve()),
         baseline_checkpoint=baseline['checkpoint'],candidate_checkpoint=candidate['checkpoint'],
         baseline_iteration=baseline['iteration'],candidate_iteration=candidate['iteration'],

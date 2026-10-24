@@ -29,6 +29,15 @@ The example's `.venv-amp` contains the upstream RSL fork and its supplied MJLab 
 
 For this velocity task, `--compile` compiles WM dynamics while leaving analytic task heads in ordinary Torch autograd (`compile_task=false`). Compiling the full contact/FK reward backward triggered a Triton 3.6 `PassManager::run failed` on the tested PyTorch 2.10 laptop setup. This changes execution strategy, not the reward or model. `--compile-task` opts into compiling those heads on a compatible stack. The failed attempt and its saved warmup checkpoint are preserved.
 
+For timing a resumed experiment, record `started_unix`, `source_commit`, and
+`resume_checkpoint` in its launch JSON. Set `prior_process_seconds` to the total
+measured execution time of all earlier processes in that checkpoint lineage,
+including failed compilation after the saved checkpoint. Pass the JSON through
+`compare --candidate-launch`. The report distinguishes cumulative trainer time,
+the current launch-to-checkpoint interval, and the total process cost. Idle time
+spent fixing code is not training time; separate earlier preflight experiments
+are not part of the final checkpoint lineage.
+
 ## Preserved real task
 
 The native G1 flat environment factory owns the robot XML, torque-speed actuators, action scale, 5 ms physics / 20 ms controls, 17 walk/run reset clips plus one recovery clip, observations, rewards and weights, heading commands, command curriculum, pushes, friction/encoder/COM randomization, and delayed recovery termination. A zero-valued reward hook captures physical transitions before reset; it does not replace the native step loop or reward terms.
