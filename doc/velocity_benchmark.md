@@ -20,9 +20,14 @@ bash scripts/setup_amp_benchmark.sh /path/to/AMP_mjlab
   --model-diagnostics --output logs/velocity_evaluation
 .venv-amp/bin/python -m examples.mjlab_amp.evaluate /path/to/ppo_model_1500.pt \
   --seconds 20 --video --output logs/ppo_evaluation
+.venv-amp/bin/python -m examples.mjlab_amp.compare \
+  logs/ppo_evaluation/evaluation.json logs/velocity_evaluation/evaluation.json \
+  --output logs/velocity_comparison
 ```
 
 The example's `.venv-amp` contains the upstream RSL fork and its supplied MJLab observation-manager patch, as the baseline requires. The main `.venv`, the old experiment's environment, host CUDA driver, and upstream tracked source files are unchanged. Installing a shared package through its normal editable installer does not require `sys.path` injection.
+
+For this velocity task, `--compile` compiles WM dynamics while leaving analytic task heads in ordinary Torch autograd (`compile_task=false`). Compiling the full contact/FK reward backward triggered a Triton 3.6 `PassManager::run failed` on the tested PyTorch 2.10 laptop setup. This changes execution strategy, not the reward or model. `--compile-task` opts into compiling those heads on a compatible stack. The failed attempt and its saved warmup checkpoint are preserved.
 
 ## Preserved real task
 

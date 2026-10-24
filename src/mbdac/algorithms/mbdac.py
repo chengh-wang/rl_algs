@@ -36,6 +36,7 @@ class MBDACConfig:
     wm_hidden: tuple = (2048,2048,2048)
     critic_hidden: tuple = (256,128)
     compile: bool = False
+    compile_task: bool = True
     amp: dict = field(default_factory=dict)
 
 
@@ -77,8 +78,8 @@ class MBDAC:
         self.history=None; self.fresh=torch.ones(num_envs,dtype=torch.bool,device=device)
         self.learning_rate=c.lr
         self._wm_step=torch.compile(self.world_model.forward) if c.compile else self.world_model.forward
-        self._reward_term=torch.compile(self._reward_and_termination) if c.compile else self._reward_and_termination
-        self._critic_input=torch.compile(self._critic_features) if c.compile else self._critic_features
+        self._reward_term=torch.compile(self._reward_and_termination) if c.compile and c.compile_task else self._reward_and_termination
+        self._critic_input=torch.compile(self._critic_features) if c.compile and c.compile_task else self._critic_features
 
     @classmethod
     def construct_algorithm(cls, obs, env, cfg, device):
