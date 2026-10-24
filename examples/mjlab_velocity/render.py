@@ -33,7 +33,7 @@ def main():
                 frame=Image.fromarray(renderer.render());draw=ImageDraw.Draw(frame)
                 draw.rectangle((0,0,800,49),fill=(18,24,32))
                 label=args.label or 'recorded native MJLab GPU physics'
-                draw.text((12,9),f'{args.robot.upper()} | {label} | t={i*dt:.2f}s',fill='white')
+                draw.text((12,9),f'{args.robot.upper()} | {label} | t={(i+1)*dt:.2f}s',fill='white')
                 draw.text((12,28),f'command vx={command[0]:.2f} vy={command[1]:.2f} m/s, yaw={command[2]:.2f} rad/s',fill='white')
                 writer.append_data(np.asarray(frame))
     finally:renderer.close()
