@@ -69,8 +69,8 @@ class MBDAC:
         if duplicates:
             raise ValueError(f'Primitives already available from state/kinematics: {sorted(duplicates)}')
         self.world_model=WorldModel(task.codec,task.action_dim,task.context_dim,c.wm_hidden,c.precision,getattr(task,'primitive_specs',())).to(device)
-        self.actor=Actor(task.obs_dim,task.goal_dim,task.action_dim,c.history,c.actor_hidden,precision=c.precision).to(device)
-        self.critic=Critic(task.critic_dim,c.critic_hidden,c.precision).to(device)
+        self.actor=self._make_actor().to(device)
+        self.critic=self._make_critic().to(device)
         self.opt_wm=torch.optim.Adam(self.world_model.parameters(),lr=c.lr)
         self.opt_actor=torch.optim.Adam(self.actor.parameters(),lr=c.lr,betas=(.9,.95))
         self.opt_critic=torch.optim.Adam(self.critic.parameters(),lr=c.lr)
@@ -80,6 +80,13 @@ class MBDAC:
         self._wm_step=torch.compile(self.world_model.forward) if c.compile else self.world_model.forward
         self._reward_term=torch.compile(self._reward_and_termination) if c.compile and c.compile_task else self._reward_and_termination
         self._critic_input=torch.compile(self._critic_features) if c.compile and c.compile_task else self._critic_features
+
+    def _make_actor(self):
+        c=self.cfg; task=self.task
+        return Actor(task.obs_dim,task.goal_dim,task.action_dim,c.history,c.actor_hidden,precision=c.precision)
+
+    def _make_critic(self):
+        return Critic(self.task.critic_dim,self.cfg.critic_hidden,self.cfg.precision)
 
     @classmethod
     def construct_algorithm(cls, obs, env, cfg, device):

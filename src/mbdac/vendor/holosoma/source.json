@@ -1,0 +1,16 @@
+{
+  "repository": "https://github.com/amazon-far/holosoma",
+  "revision": "d18d6cc50f872c15e904a22ceac22313cec955c8",
+  "files": {
+    "fast_sac.py": {
+      "source": "src/holosoma/holosoma/agents/fast_sac/fast_sac.py",
+      "sha256": "c0817d6256702bbc97668b6349c64dce6ef34558efe548877cec88593d776ea4",
+      "changes": "none"
+    },
+    "normalization.py": {
+      "source": "src/holosoma/holosoma/agents/fast_sac/fast_sac_utils.py",
+      "source_sha256": "282f289d5dd83f09d97cf92bc7159f08e9d8787b8daa4e2aed1331e570f23018",
+      "changes": "Extract only the verbatim EmpiricalNormalization class; supply Torch imports."
+    }
+  }
+}

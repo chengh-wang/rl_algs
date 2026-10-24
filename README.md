@@ -2,6 +2,8 @@
 
 Independent PyTorch package for **MBDAC** (model-based differentiable actor-critic) and **MBDACAMP** (the same learner with an AMP motion prior). The public runner follows RSL-RL conventions. Simulator gradients are not required.
 
+Version 0.2 adds **MBDACFastSAC**: the pinned Holosoma FastSAC numerical actor/Q modules, real-only distributional Q fitting, and a short entropy-regularized world-model actor rollout. It is a model-based extension of **Holosoma FastSAC**, not the separate FlashSAC paper implementation. Existing MBDAC/MBDACAMP algorithms and checkpoints remain independent.
+
 Experimental implementation with completed native **MJLab** training and measured comparisons. G1 motion tracking and AMP velocity learning run in 1024 `ManagerBasedRlEnv` worlds; full updates, physical evaluations, resume and SDK-free actor export are verified. Velocity quality is mixed and does not establish an overall speedup at equal quality. Other simulator backends have adapter/smoke evidence only and were not used for the current training.
 
 ## Fresh installation (Linux, NVIDIA GPU)
@@ -61,6 +63,43 @@ Evaluation writes an MP4 and per-clip survival, return, joint RMSE and body-posi
 
 `--algorithm MBDACAMP` enables the additional adversarial prior. That extension has gradient-isolation tests and actual native 1024-world learning/evaluations; measured velocity quality remains limited. Its discriminator uses real policy transitions and motion reference pairs, while its style reward contributes gradients through imagined actor rollouts. This is an extension to SuperMimic, not a claim that its reference code already contains AMP imitation learning.
 
+## Holosoma FastSAC with a differentiable world model
+
+The learning core vendors the unchanged SDK-free `Actor`, `Critic` and categorical projection from Holosoma revision `d18d6cc50f872c15e904a22ceac22313cec955c8`. Apache-2.0 license/NOTICE and a source hash manifest are included in the wheel. Installing Holosoma, Isaac Sim, or another Torch/CUDA environment is unnecessary for this extension.
+
+| Module | Responsibility and integration |
+| --- | --- |
+| `vendor/holosoma/fast_sac.py` | Original tanh Gaussian/`rsample` actor, LayerNorm networks, Q ensemble and C51 projection, byte-identical to pinned source |
+| `vendor/holosoma/normalization.py` | Verbatim source empirical-normalization class, extracted without Holosoma runtime imports |
+| `modules/holosoma.py` | History/goal layout, functional normalization with input gradients and fixed real-data statistics, Q expectation; preserves source normalization epsilon/statistics |
+| `algorithms/mbdac_fast_sac.py` | WM fit, real-only Q/temperature updates, short model actor objective, target EMA, full save/load |
+| Existing WM/replay/task modules | Physical-state codec, real autoregressive fit, analytic-first physical heads, reset-safe windows and observations/reward/termination |
+| `examples/mjlab_g1/fast_sac.py` | Named G1 joint-bound/PD action contract and phase clamp matching native pre-reset reference |
+| `examples/mjlab_g1/train_fast_sac.py` | Single-clip data provenance and native manager-based launch; no new reward or physics implementation |
+
+The actor maximizes a discounted imagined sum of `reward - alpha * log_prob`, with soft survival and terminal `mean_Q - alpha * log_prob`. At horizon 0 its loss and every actor gradient match the original Holosoma actor objective. Horizons greater than 0 explicitly change that objective. Parameters of WM and Q are frozen during actor updates while state/action input derivatives remain live. C51 targets and temperature updates are detached. The source `explore()` and normalizer `forward()` disable gradients and therefore cannot be used unchanged inside BPTT; the numerical actor's differentiable sampling method and a functional normalization adapter are used instead.
+
+Default schedule: initial 64 real steps; 500 WM-only outer iterations; then each outer iteration collects alternating 2/3 vector steps and performs **10 WM → 4 real Q/temperature/target updates with 2 actor updates interleaved**. This is a new hybrid schedule, not SuperMimic's 10:1:20 schedule or an unchanged Holosoma `learn()` loop. Q uses the original ensemble mean, distributional cross-entropy, tau 0.05, gamma 0.99, 501 atoms on [-20,20], source learning rates/AdamW decay and entropy target. Laptop Q batch is 256 instead of the source's 8192. Model actor gradients are clipped at norm 1 for BPTT. Symmetry/CNN/distributed training and n-step Q returns are not implemented by this adapter; this WBT example uses one-step Q returns, as does the pinned WBT preset.
+
+```bash
+# Uses the same .venv and robot/motion assets as the existing G1 example.
+.venv/bin/python -m examples.mjlab_g1.train_fast_sac \
+  --smoke --num-envs 1024 --iterations 3 --logger tensorboard \
+  --log-dir logs/g1_wm_fastsac_smoke
+
+# Actual small policy: first 10 s of one unmodified reference, 1024 native worlds.
+.venv/bin/python -m examples.mjlab_g1.train_fast_sac \
+  --num-envs 1024 --iterations 3000 --horizon 3 --compile \
+  --log-dir logs/g1_wm_fastsac_v1
+
+.venv/bin/python -m examples.mjlab_g1.evaluate \
+  logs/g1_wm_fastsac_v1/model_3000.pt \
+  --motion-dir logs/g1_wm_fastsac_v1/motion --seconds 10 --video-seconds 10 \
+  --output logs/g1_wm_fastsac_eval_3000
+```
+
+The subset records original/selected-file SHA256 and frame range; original data is never overwritten. Run length is an initial probe, not a convergence guarantee. Evaluate the actor in physical simulation and report WM fitting/collection/actor/Q costs together. New configs select `class_name="MBDACFastSAC"` through the same public runner. Full resume includes target Q, temperature/optimizer and update counters; actor-only inference/export needs no WM or simulator SDK. `load_cfg={"temperature": True}` selects a temperature warm start. Existing MBDAC checkpoints cannot directly initialize this different actor architecture.
+
 ## RSL-style use
 
 ```python
@@ -79,7 +118,7 @@ The vector environment returns a TensorDict with single-frame `actor` observatio
 
 Inference maintains observation history; call `policy.reset(dones)` after environment resets. The exported policy is stateless and takes `(observation_history, goal)` explicitly. It contains only the actor and normalization; the caller applies action clipping and its environment's action scale/PD interface. Export does not change live training parameters, device, or mode. Resume restores networks, optimizers, normalization, RNG, iteration and cumulative training time; physics state is reset and replay is refilled if not included. It is not a bitwise continuation of the simulator.
 
-Like RSL-RL, `load_cfg` selects a warm start: `runner.load(path, load_cfg={"actor": True})` loads only the actor without advancing counters or restoring RNG. Available keys are `actor`, `critic`, `world_model`, `optimizer`, `replay`, `iteration`, `rng`, and `prior` for MBDACAMP. Omitting `load_cfg` requests full resume. Actor and model normalizers use real data; the critic normalizer uses detached imagined features, following the reference method.
+Like RSL-RL, `load_cfg` selects a warm start: `runner.load(path, load_cfg={"actor": True})` loads only the actor without advancing counters or restoring RNG. Available keys are `actor`, `critic`, `world_model`, `optimizer`, `replay`, `iteration`, `rng`, and `prior` for MBDACAMP or `temperature` for MBDACFastSAC. Omitting `load_cfg` requests full resume. Actor and model normalizers use real data. The original MBDAC/MBDACAMP critic normalizer uses detached imagined features; MBDACFastSAC's Q normalizer uses real physical features only.
 
 ## Differences from the reference training scale
 

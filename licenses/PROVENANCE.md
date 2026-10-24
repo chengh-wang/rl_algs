@@ -1,5 +1,7 @@
 # Provenance
 
+- `MBDACFastSAC` reuses Holosoma revision `d18d6cc50f872c15e904a22ceac22313cec955c8` (Amazon, Apache-2.0). `src/mbdac/vendor/holosoma/fast_sac.py` is unchanged upstream numerical code; `normalization.py` contains its verbatim `EmpiricalNormalization` class with only standalone imports supplied. See `source.json`, `holosoma-Apache-2.0.txt` and `holosoma-NOTICE.txt`. Local adapters preserve its statistical update and provide differentiable normalization without updating statistics on imagination. History/goal inputs, native task adapter, real-only Q anchoring and short model-based actor objective are our extensions. This is not the separate FlashSAC implementation and is not an unchanged Holosoma training loop.
+
 - Algorithm reference: SuperMimic, arXiv:2610.28480, sections 3 and appendices A-G. Independent implementation; no claim of an official release.
 - Initial numerical implementations: `zita-ch/supermimic_vibed`, commit `a1508d42c9d1699a52e8233ab16d08c488441ab9`, MIT, Copyright 2026 ETH Zurich, Chong Zhang. See `supermimic_vibed-MIT.txt`. Rotation utilities, G1 robot constants, FK, motion processing, analytic task formulas, and URDF conversion retain source headers. Learner architecture/update math follows this reference, refactored into an independent package.
 - Public interface design: RSL-RL 5.x, especially v5.0.1, without importing or monkeypatching its learner or copying a full runner.

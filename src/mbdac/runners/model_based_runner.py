@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 import torch
 from torch import nn
-from mbdac.algorithms import MBDAC, MBDACAMP
+from mbdac.algorithms import MBDAC, MBDACAMP, MBDACFastSAC
 
 
 class InferencePolicy(nn.Module):
@@ -39,7 +39,7 @@ class ModelBasedRunner:
     def __init__(self, env, train_cfg, log_dir=None, device='cpu'):
         self.env=env; self.cfg=copy.deepcopy(train_cfg); self.device=device
         name=self.cfg.get('algorithm',{}).get('class_name','MBDAC').split(':')[-1]
-        classes={'MBDAC':MBDAC,'MBDACAMP':MBDACAMP}
+        classes={'MBDAC':MBDAC,'MBDACAMP':MBDACAMP,'MBDACFastSAC':MBDACFastSAC}
         self.alg=classes[name].construct_algorithm(env.get_observations(),env,self.cfg,device)
         self.cfg['algorithm']={'class_name':name,**asdict(self.alg.cfg)}
         self.current_learning_iteration=0; self.real_transitions=0; self._step_acc=0.; self.elapsed_s=0.
