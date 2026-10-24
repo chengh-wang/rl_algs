@@ -150,7 +150,7 @@ class MBDAC:
     def _sample_starts(self):
         c=self.cfg; starts=[]; histories=[]; found=0
         for _ in range(100):
-            s,h=self.replay.sample_starts(2*c.pi_batch,c.history)
+            s,h=self._sample_replay_starts(2*c.pi_batch,c.history)
             valid=self.task.valid_start(s['condition'],c.horizon)
             idx=valid.nonzero().flatten()[:c.pi_batch-found]
             starts.append({k:v[idx] for k,v in s.items()}); histories.append({k:v[idx] for k,v in h.items()}); found+=len(idx)
@@ -158,6 +158,9 @@ class MBDAC:
                 cat=lambda rows:{k:torch.cat([r[k] for r in rows]) for k in rows[0]}
                 return cat(starts),cat(histories)
         raise RuntimeError('No sufficient valid imagination starts; check goal/clip boundaries')
+
+    def _sample_replay_starts(self, batch, history):
+        return self.replay.sample_starts(batch,history)
 
     def _primitives(self, state, context):
         if not self.world_model.primitive_heads.specs: return {}

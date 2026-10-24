@@ -48,7 +48,7 @@ def test_horizon_zero_loss_and_all_actor_gradients_match_holosoma():
         expected_inputs=alg.actor.inputs(hist,alg.task.goal(start['condition']))
         torch.set_rng_state(rng)
         actions,logp=alg.actor.net.get_actions_and_log_probs(expected_inputs)
-        x=alg._critic_features(start['s'],start['condition'],start['context'])
+        x=alg._q_features(start['s'],start['condition'],start['context'],start['a_prev'],hist)
         q=alg.critic.net.get_value(torch.softmax(alg.critic.net(alg.critic.norm(x),actions),-1)).mean(0)
         expected=(alg.log_alpha.exp().detach()*logp-q).mean()
         assert torch.equal(-objective,expected)
@@ -79,10 +79,10 @@ def test_real_c51_update_matches_source_projection_and_terminal_bootstrap():
     torch.manual_seed(23);env=ToyEnv();alg=MBDACFastSAC(env.model_task,4,config());fill(alg,env)
     batch=alg._real_batch(8)
     alg._real_batch=lambda _:batch
-    tr,_,next_hist,c1=batch
+    tr,hist,next_hist,c1=batch
     tr['terminated'][:4]=True;tr['terminated'][4:]=False;tr['truncated'][4:]=True
-    next_x=alg._critic_features(tr['s1'],c1,tr['context'])
-    x=alg._critic_features(tr['s'],tr['condition'],tr['context'])
+    next_x=alg._q_features(tr['s1'],c1,tr['context'],tr['a'],next_hist)
+    x=alg._q_features(tr['s'],tr['condition'],tr['context'],tr['a_prev'],hist)
     reference=copy.deepcopy(alg.critic)
     optimizer=torch.optim.AdamW(reference.parameters(),lr=alg.cfg.fast_sac['critic_lr'],betas=(.9,.95),weight_decay=alg.cfg.fast_sac['weight_decay'])
     rng=torch.get_rng_state()
@@ -172,3 +172,55 @@ def test_real_actor_batch_is_independent_of_model_rollout_batch():
         seen.append(len(hist));return sample(hist,goal)
     alg.actor.sample=counted;alg.update_actor()
     assert seen[:-1]==[8]*(cfg.horizon+1) and seen[-1]==16
+
+
+def test_q_state_distinguishes_action_rate_memory():
+    env=ToyEnv();alg=MBDACFastSAC(env.model_task,4,config())
+    s=torch.zeros(4,2);c=torch.ones(4,1);ctx=torch.zeros(4,1);hist=torch.zeros(4,2,2)
+    zero=torch.zeros(4,1);one=torch.ones(4,1)
+    x0=alg._q_features(s,c,ctx,zero,hist);x1=alg._q_features(s,c,ctx,one,hist)
+    assert torch.equal(x0[:,:env.model_task.critic_dim],x1[:,:env.model_task.critic_dim])
+    assert not torch.equal(x0,x1)
+    assert alg.critic.norm.mean.numel()==env.model_task.critic_dim+env.num_actions+4
+
+
+def test_replay_preserves_actual_noisy_policy_memory_and_terminal_shift():
+    env=ToyEnv();alg=MBDACFastSAC(env.model_task,4,config())
+    obs=env.get_observations();obs['actor']+=13
+    actual_histories=[]
+    for i in range(6):
+        action=alg.act(obs);actual_histories.append(alg.history.clone())
+        nxt,r,d,extra=env.step(action);nxt['actor']+=14+i
+        tr=extra['model_transition'];terminal=tr['s1']+50
+        tr.update(terminal_actor_observation=terminal.clone(),collector_id=torch.full((4,),i),world_id=torch.arange(4))
+        alg.process_env_step(nxt,r,d,extra)
+        stored=alg.replay.data;row=alg.replay._row(alg.replay.size-1)
+        assert torch.equal(stored['actor_observation'][row],actual_histories[-1][:,-1])
+        expected=torch.where(d.bool()[:,None],terminal,nxt['actor'])
+        assert torch.equal(stored['next_actor_observation'][row],expected)
+        obs=nxt
+    start,h=alg._sample_replay_starts(128,2)
+    expected=torch.stack(actual_histories)[start['collector_id'],start['world_id']]
+    assert torch.equal(alg._history(h),expected)
+    tr,hist,nxt_hist,_=alg._real_batch(64)
+    assert torch.equal(nxt_hist[:,:-1],hist[:,1:])
+    assert torch.equal(nxt_hist[:,-1],tr['next_actor_observation'])
+
+
+def test_q_replay_excludes_unknown_history_at_circular_buffer_front():
+    from mbdac.storage.replay import ReplayBuffer
+    replay=ReplayBuffer(8,1,'cpu')
+    for i in range(12):
+        replay.add(dict(s=torch.tensor([[float(i)]]),ep_step=torch.tensor([100+i]),
+            terminated=torch.tensor([False]),truncated=torch.tensor([False])))
+    s,h=replay.sample_starts(128,4,full_history=True)
+    assert (s['s'][:,0]>=7).all()
+    assert torch.equal(h['s'][:,:,0],s['s'][:,0,None]+torch.arange(-3,1)[None])
+
+
+def test_legacy_incomplete_q_checkpoint_cannot_silently_resume():
+    import pytest
+    env=ToyEnv();alg=MBDACFastSAC(env.model_task,4,config())
+    old=alg.save();old.pop('fast_sac_state_version')
+    with pytest.raises(ValueError,match='incomplete Q memory'):alg.load(old)
+    alg.load(old,load_cfg={'world_model':True})

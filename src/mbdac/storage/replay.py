@@ -32,11 +32,24 @@ class ReplayBuffer:
         out['mask']=torch.cumprod(torch.cat((torch.ones(batch,1,device=self.device),1-done[:,:-1].float()),1),1)
         return out
 
-    def sample_starts(self, batch, history):
+    def sample_starts(self, batch, history, full_history=False):
         if not self.size:
             raise RuntimeError('Empty replay')
-        age=torch.randint(self.size,(batch,),device=self.device)
-        env=torch.randint(self.num_envs,(batch,),device=self.device); row=self._row(age)
+        if full_history:
+            ages=[];envs=[];found=0
+            for _ in range(100):
+                candidate=torch.randint(self.size,(2*batch,),device=self.device)
+                world=torch.randint(self.num_envs,(2*batch,),device=self.device)
+                needed=self.data['ep_step'][self._row(candidate),world].clamp(max=history-1)
+                ids=(candidate>=needed).nonzero().flatten()[:batch-found]
+                ages.append(candidate[ids]);envs.append(world[ids]);found+=len(ids)
+                if found==batch: break
+            if found<batch: raise RuntimeError('Replay does not yet contain complete policy histories')
+            age=torch.cat(ages);env=torch.cat(envs)
+        else:
+            age=torch.randint(self.size,(batch,),device=self.device)
+            env=torch.randint(self.num_envs,(batch,),device=self.device)
+        row=self._row(age)
         back=torch.arange(history-1,-1,-1,device=self.device)[None]
         back=torch.minimum(torch.minimum(back,self.data['ep_step'][row,env,None].long()),age[:,None])
         ages=age[:,None]-back

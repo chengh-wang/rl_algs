@@ -5,6 +5,14 @@ from .robot import G1_JOINT_NAMES, action_scale
 
 
 class G1FastSACTask(G1ModelTask):
+    critic_dim=G1ModelTask.critic_dim+1
+
+    def critic_features(self, state, condition, context, primitives=None):
+        physical=super().critic_features(state,condition,context,primitives)
+        # Privileged Q needs the exact reference-clock state, not only a finite
+        # future preview that can alias two phases with different later goals.
+        return torch.cat((physical,condition.float().unsqueeze(-1)*.02),-1)
+
     def advance(self, condition, state=None, context=None):
         # Native physics clamps its final reference frame before reset. Q still
         # bootstraps time limits using this pre-reset physical state/reference.

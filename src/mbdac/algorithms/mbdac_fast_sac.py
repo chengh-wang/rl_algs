@@ -39,7 +39,7 @@ class MBDACFastSAC(MBDAC):
         if (not torch.isfinite(bounds).all() or (bounds<=0).any() or
                 bounds.numel() not in (1,task.action_dim) or bounds.max()>cfg.action_clip):
             raise ValueError('FastSAC action bounds must be finite, positive and within action_clip')
-        if (cfg.horizon<0 or cfg.history<1 or f['critic_updates']<1 or f['policy_frequency']<1 or
+        if (cfg.horizon<0 or cfg.history<1 or cfg.buffer_steps<cfg.history or f['critic_updates']<1 or f['policy_frequency']<1 or
                 f['num_atoms']<2 or f['v_min']>=f['v_max'] or not 0<f['tau']<=1 or f['alpha_init']<=0 or
                 f['num_q_networks']<1 or f['critic_batch']<1 or f['actor_hidden_dim']<4 or f['critic_hidden_dim']<4 or
                 f['log_std_min']>f['log_std_max'] or min(f['actor_lr'],f['critic_lr'],f['alpha_lr'])<=0):
@@ -74,7 +74,10 @@ class MBDACFastSAC(MBDAC):
         return HolosomaActor(t.obs_dim,t.goal_dim,t.action_dim,self.cfg.history,self.cfg.fast_sac)
 
     def _make_critic(self):
-        return HolosomaCritic(self.task.critic_dim,self.task.action_dim,self.cfg.fast_sac)
+        # Reward depends on a_prev; future policy depends on observation memory.
+        # These are controlled-system state, even if the physical codec omits them.
+        dim=self.task.critic_dim+self.task.action_dim+self.cfg.history*self.task.obs_dim
+        return HolosomaCritic(dim,self.task.action_dim,self.cfg.fast_sac)
 
     @torch.no_grad()
     def act(self, obs):
@@ -91,12 +94,28 @@ class MBDACFastSAC(MBDAC):
     @torch.no_grad()
     def process_env_step(self, obs, rewards, dones, extras):
         tr={**extras['model_transition'],'reward':rewards.detach().clone()}
-        super().process_env_step(obs,rewards,dones,{**extras,'model_transition':tr})
         c1=self._next_condition(tr)
-        current=self._critic_features(tr['s'],tr['condition'],tr['context'])
-        future=self._critic_features(tr['s1'],c1,tr['context'])
+        labels={k.split('/',1)[1]:v for k,v in tr.items() if k.startswith('primitive/')}
+        physical_obs=self.task.observation(tr['s1'],tr['a'],tr['context'],c1,primitives=labels)
+        physical_obs=self.task.add_noise(physical_obs)
+        # Live environments return their true next observation. Auto-reset rows
+        # instead require the physical terminal observation before that reset.
+        terminal_obs=tr.get('terminal_actor_observation',physical_obs)
+        next_obs=torch.where(dones.bool()[:,None],terminal_obs,obs['actor'])
+        tr.update(actor_observation=self.history[:,-1].clone(),
+                  next_actor_observation=next_obs.clone(),condition1=c1.clone())
+        current=self._q_features(tr['s'],tr['condition'],tr['context'],tr['a_prev'],self.history)
+        next_history=torch.cat((self.history[:,1:],next_obs[:,None]),1)
+        future=self._q_features(tr['s1'],c1,tr['context'],tr['a'],next_history)
+        super().process_env_step(obs,rewards,dones,{**extras,'model_transition':tr})
         self.critic.norm.update(torch.cat((current,future)))
         self.target_critic.norm.load_state_dict(self.critic.norm.state_dict())
+
+    def _q_features(self, state, condition, context, previous_action, history):
+        return torch.cat((self._critic_features(state,condition,context),previous_action,history.flatten(-2)),-1)
+
+    def _sample_replay_starts(self, batch, history):
+        return self.replay.sample_starts(batch,history,full_history=True)
 
     def _next_condition(self, transition):
         # Exogenous command changes belong to the adapter, not the dynamics WM.
@@ -105,24 +124,24 @@ class MBDACFastSAC(MBDAC):
         return self.task.advance(transition['condition'],state=transition['s1'],context=transition['context'])
 
     def _history(self, history):
-        return self.task.add_noise(self.task.observation(history['s'],history['a_prev'],history['context'],
-            history['condition'],primitives=self._primitives(history['s'],history['context'])))
+        # Preserve actual sensor noise and reset padding; do not re-synthesize
+        # independent noisy observations of duplicated initial frames.
+        return history['actor_observation']
 
     @torch.no_grad()
     def _real_batch(self, batch):
-        tr,h=self.replay.sample_starts(batch,self.cfg.history)
+        tr,h=self._sample_replay_starts(batch,self.cfg.history)
         hist=self._history(h)
         cond1=self._next_condition(tr)
-        obs1=self.task.add_noise(self.task.observation(tr['s1'],tr['a'],tr['context'],cond1,
-                                  primitives=self._primitives(tr['s1'],tr['context'])))
+        obs1=tr['next_actor_observation']
         return tr,hist,torch.cat((hist[:,1:],obs1[:,None]),1),cond1
 
     def update_real_critic(self):
         f=self.cfg.fast_sac
         tr,hist,next_hist,cond1=self._real_batch(f['critic_batch'])
         with torch.no_grad():
-            features=self._critic_features(tr['s'],tr['condition'],tr['context'])
-            next_features=self._critic_features(tr['s1'],cond1,tr['context'])
+            features=self._q_features(tr['s'],tr['condition'],tr['context'],tr['a_prev'],hist)
+            next_features=self._q_features(tr['s1'],cond1,tr['context'],tr['a'],next_hist)
             action1,logp1=self.actor.sample(next_hist,self.task.goal(cond1))
             # True terminations stop bootstrap; time limits keep the physical s1.
             bootstrap=(~tr['terminated'].bool()).float()
@@ -166,7 +185,7 @@ class MBDACFastSAC(MBDAC):
             s,cond,previous=s1,cond1,action
             entropies.append(-logp); rewards.append(r)
         terminal_action,terminal_logp=self.actor.sample(hist,self.task.goal(cond))
-        value=self.critic.value(self._critic_features(s,cond,ctx),terminal_action)
+        value=self.critic.value(self._q_features(s,cond,ctx,previous,hist),terminal_action)
         objective=objective+self.cfg.gamma**self.cfg.horizon*alive*(value-self.log_alpha.exp().detach()*terminal_logp)
         entropies.append(-terminal_logp)
         return objective.mean(),dict(imagined_reward=float(torch.stack(rewards).detach().mean()) if rewards else 0.,
@@ -187,10 +206,10 @@ class MBDACFastSAC(MBDAC):
                 real_start,real_history=start,history
                 if self.cfg.fast_sac['real_actor_batch'] is not None:
                     with torch.no_grad():
-                        real_start,rows=self.replay.sample_starts(self.cfg.fast_sac['real_actor_batch'],self.cfg.history)
+                        real_start,rows=self._sample_replay_starts(self.cfg.fast_sac['real_actor_batch'],self.cfg.history)
                         real_history=self._history(rows)
                 action,logp=self.actor.sample(real_history,self.task.goal(real_start['condition']))
-                value=self.critic.value(self._critic_features(real_start['s'],real_start['condition'],real_start['context']),action)
+                value=self.critic.value(self._q_features(real_start['s'],real_start['condition'],real_start['context'],real_start['a_prev'],real_history),action)
                 real_objective=(value-self.log_alpha.exp().detach()*logp).mean()
                 objective=weight*objective+(1-weight)*real_objective if weight else real_objective
                 logs.update(real_actor_loss=float(-real_objective.detach()),real_actor_entropy=float(-logp.detach().mean()))
@@ -229,11 +248,13 @@ class MBDACFastSAC(MBDAC):
 
     def save(self, include_replay=False):
         state=super().save(include_replay)
-        state.update(target_critic=self.target_critic.state_dict(),log_alpha=self.log_alpha.detach().clone(),
+        state.update(fast_sac_state_version=2,target_critic=self.target_critic.state_dict(),log_alpha=self.log_alpha.detach().clone(),
                      opt_alpha=self.opt_alpha.state_dict(),critic_updates=self.critic_updates,actor_updates=self.actor_updates)
         return state
 
     def load(self, state, load_cfg=None, strict=True):
+        if state.get('fast_sac_state_version')!=2 and (load_cfg is None or any(load_cfg.get(k) for k in ['critic','optimizer','replay','iteration'])):
+            raise ValueError('Legacy FastSAC prototype has incomplete Q memory; only actor/WM warm starts are supported')
         load_iteration=super().load(state,load_cfg,strict)
         if load_cfg is None or load_cfg.get('critic'):
             self.target_critic.load_state_dict(state['target_critic'],strict=strict)
