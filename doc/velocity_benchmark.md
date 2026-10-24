@@ -28,6 +28,8 @@ The example's `.venv-amp` contains the upstream RSL fork and its supplied MJLab 
 
 The native G1 flat environment factory owns the robot XML, torque-speed actuators, action scale, 5 ms physics / 20 ms controls, 17 walk/run reset clips plus one recovery clip, observations, rewards and weights, heading commands, command curriculum, pushes, friction/encoder/COM randomization, and delayed recovery termination. A zero-valued reward hook captures physical transitions before reset; it does not replace the native step loop or reward terms.
 
+The privileged critic additionally receives the native delayed-recovery flag, counter and readiness state. Those determine reward and termination even for identical physical states; the physical world model does not need to predict them. The actor keeps the original proprioceptive/command interface.
+
 The learner reads the last frame of the native observation manager's output, including its exact sensor values, order and noise sample. It maintains four-frame history and also has a three-dimensional goal encoder. Actor/critic hidden widths are 512/256/128 for this velocity example. These architecture differences and the 1024-world/batch adaptations must be reported against the retained 4096-world PPO run.
 
 ## Model task and basic physical heads

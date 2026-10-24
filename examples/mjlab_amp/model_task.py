@@ -16,7 +16,7 @@ from examples.mjlab_g1.robot import G1_JOINT_NAMES
 
 
 class BaselineVelocityTask:
-    action_dim=29; context_dim=33; obs_dim=96; goal_dim=3; critic_dim=302; amp_feature_dim=195
+    action_dim=29; context_dim=33; obs_dim=96; goal_dim=3; critic_dim=305; amp_feature_dim=195
     analytic_primitives=G1ModelTask.analytic_primitives
     amp_features=G1ModelTask.amp_features
 
@@ -73,7 +73,10 @@ class BaselineVelocityTask:
         return failure*torch.where(c[...,3]>0,c[...,5],1.)
 
     def critic_features(self,state,c,context,primitives=None):
-        return torch.cat((self.codec.features(state),self.goal(c),self.normalize_context(context),self.amp_features(state)),-1)
+        # Delayed recovery changes reward/termination at the same physical state.
+        # Give the privileged critic that native bookkeeping as well.
+        bookkeeping=c[...,3:6]/c.new_tensor([1.,250.,1.])
+        return torch.cat((self.codec.features(state),self.goal(c),self.normalize_context(context),self.amp_features(state),bookkeeping),-1)
 
     def data_view(self,state,c,action,previous,primitives,overrides=None,soft=True):
         B=len(state); p,R,v,w,q,qd=self.codec.unpack(state)
