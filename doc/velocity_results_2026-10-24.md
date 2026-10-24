@@ -1,6 +1,6 @@
 # Native MJLab AMP velocity comparison (2026-10-24)
 
-Status: MBDACAMP training is running. No speed or quality advantage is established.
+Status: the first 2000 MBDACAMP iterations and three matched physical evaluations are complete. Velocity tracking and gait quality remain below the retained PPO forward-walking baseline; no speed advantage at matched quality is established.
 
 ## Fixed evaluation protocol
 
@@ -30,4 +30,29 @@ The first full-task actor compilation failed in Triton after warmup. The continu
 
 [MBDACAMP W&B](https://forge.coreweave.com/wandb/sslab_motion_mimic-teams/mbdac-velocity/runs/0qn25b2s)
 
-Candidate physical evaluation and matched comparison remain pending. No additional MBDAC-only long training is scheduled.
+No additional MBDAC-only long training is scheduled.
+
+## First MBDACAMP learning results
+
+All checks below use actual native physics, not motion playback or world-model imagination. At iteration 1000, every case failed around 1.1 s. At 1500 and 2000, every case survived the full 20 s. However, commanded direction and yaw are not yet learned satisfactorily.
+
+| Command | 1500 XY RMSE (m/s) | 2000 XY RMSE (m/s) | 2000 yaw RMSE (rad/s) |
+| --- | ---: | ---: | ---: |
+
+| forward | 0.2505 | 0.2256 | 1.4697 |
+| backward | 0.9383 | 0.9957 | 1.2857 |
+| lateral_left | 0.7144 | 0.7983 | 1.3934 |
+| turn_left | 0.6424 | 0.6274 | 1.0139 |
+| stand | 0.5832 | 0.6762 | 1.5019 |
+
+The 2000 actor moves forward and turns across all five commands. Its forward mean body vx is 0.713 m/s for a 0.8 m/s request, but XY RMSE is 0.226 m/s and yaw RMSE 1.470 rad/s, worse than PPO's 0.159 / 0.335. It makes 92/105 foot liftoffs in 18 steady seconds, with 0.438 m/s foot-slip RMS and greater joint acceleration than the PPO gait. This is stable motion, not accepted smooth command tracking. Continued AMP learning is needed; survival alone does not establish success.
+
+The saved 2000 checkpoint contains 5,251,072 real transitions and 1386.34 s cumulative trainer time. Including the earlier failed compilation process and both launches gives 1584.04 s (26.40 min) to the saved checkpoint, versus 8196.95 s for PPO 1500. These are costs to different quality levels, not a time-to-equivalent-quality result. Full process termination took slightly longer due to checkpoint/log synchronization.
+
+Fresh nominal physics data gives WM one/eight-step linear-velocity RMSE 0.0405/0.0571 m/s, angular-velocity RMSE 0.294/0.358 rad/s and joint-position RMSE 0.00854/0.0247 rad. The acceleration head RMSE is 73.4 rad/s² with true state inputs and 122.7 with predicted states; foot-contact RMSE is 0.166/0.320. These identify remaining model/physical-head approximation error. Offline evaluation of 4995 real nominal transitions shows mean AMP style reward 0.687 and only 0.76% at zero, so the style reward is not uniformly clipped away.
+
+The evaluator initially missed assigning its diagnostic task to the physical capture hook. That caused a missing-label error after simulation; it has been fixed and the complete evaluation rerun. Training captured the labels correctly throughout. Both failed and successful evaluation artifacts are retained.
+
+Independent discriminator optimizer details also differ from the fork's PPO implementation: MBDACAMP follows the model-based learner's 2e-4 schedule and does not apply the fork's separate 0.001 trunk / 0.1 head weight decays. Both use LS-GAN and gradient penalty 10, expert features, width 1024/512/256 and the same task/style mixture. This is an algorithm comparison, not a claim that all optimizer settings are identical.
+
+Evidence: `logs/velocity_comparison_2000/comparison.json`, `logs/velocity_progress_2000.png`, `logs/velocity_eval_mbdacamp_{1000,1500,2000}/evaluation.json`, `logs/velocity_eval_mbdacamp_2000/forward.mp4` and `prior_audit.json`.

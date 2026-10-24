@@ -79,7 +79,8 @@ def main():
         from mbdac.modules.world_model import WorldModel
         from mbdac.storage.replay import ReplayBuffer
         from .model_task import BaselineVelocityTask
-        task=BaselineVelocityTask(env); options=checkpoint['cfg']['algorithm']
+        task=BaselineVelocityTask(env); env.model_task=task
+        options=checkpoint['cfg']['algorithm']
         model=WorldModel(task.codec,29,33,options['wm_hidden'],options['precision'],task.primitive_specs).to(env.device)
         model.load_state_dict(checkpoint['world_model'],strict=True); model.eval()
         replay=ReplayBuffer(256,5,env.device)
