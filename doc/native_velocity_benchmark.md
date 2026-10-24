@@ -195,6 +195,39 @@ produces the primary comparison plots. Its optional `--wait-pid` waits for the
 confirmed matrix process before using the GPU. G1 is a fresh same-config task
 test, not zero-shot weight transfer. No video joint smoothing is applied.
 
+## Integration differences checked against the pinned learner
+
+The upstream baseline inherits its complete training loop. The new runner's
+`real_only` mode is an integration-matched ablation, not a step-for-step upstream
+reimplementation. In particular:
+
+| Item | Pinned upstream FastSAC | New runner, real-only and hybrid |
+| --- | --- | --- |
+| Actor/critic normalization | Sampled replay current/next batches; 65,536 rows each per loop | Current real collection for actor; current/next real collection for Q |
+| Compilation | Q update, actor update, collection policy and normalization | WM forward compiled; real Q/actor update path remains eager |
+| Actor phase within eight Q steps | After Q2 and Q6 | After Q4 and Q8 |
+| Replay draws | World-stratified large batch split into eight; actor reuses Q batch | Independent uniform Q batches and separate actor draws |
+| Actor gradient clipping | Disabled | Norm1 |
+| Go1 actor input | Native48 | Native48 plus duplicate command3 |
+| Go1 Q input including candidate action | Native critic72 plus action12 | Native critic72, previous action12, noisy actor history48, action12 |
+
+Actor/critic normalization counts in actual checkpoints confirm this distinction:
+source update3010 has393,216,000 samples in each normalizer; new update1000 has
+1,035,264 actor/goal samples and2,070,528 Q samples. These are counts of updates
+to statistics, not independent simulator samples. The new Q history and action
+memory preserve the generic policy memory contract; they duplicate some native
+features in this single-frame task. Thus the original-vs-new wall-time comparison
+also includes compiler, memory-feature and normalization differences. The internal
+real-only control can isolate the model contribution within this integration;
+it does not isolate all integration costs relative to upstream.
+
+The audit found matching C51 loss/reduction, atom support, twin-Q mean, gamma,
+target EMA, action scale/tanh/density correction and temperature objective.
+Timeouts bootstrap from physical pre-reset successors. For true terminations,
+upstream uses reset successor observations while the adapter retains physical
+terminal observations. Both zero Q bootstrap, but the successor distribution in
+the alpha update can differ. No native reward was changed for these experiments.
+
 `process_elapsed_s` in timing manifests is recorded before W&B shutdown and
 environment cleanup. Matrix `process_s` includes the full child process where
 available. Neither should be silently substituted for the other in a cost
