@@ -45,7 +45,7 @@ All checks below use actual native physics, not motion playback or world-model i
 | turn_left | 0.6424 | 0.6274 | 1.0139 |
 | stand | 0.5832 | 0.6762 | 1.5019 |
 
-The 2000 actor moves forward and turns across all five commands. Its forward mean body vx is 0.713 m/s for a 0.8 m/s request, but XY RMSE is 0.226 m/s and yaw RMSE 1.470 rad/s, worse than PPO's 0.159 / 0.335. It makes 92/105 foot liftoffs in 18 steady seconds, with 0.438 m/s foot-slip RMS and greater joint acceleration than the PPO gait. This is stable motion, not accepted smooth command tracking. Continued AMP learning is needed; survival alone does not establish success.
+The 2000 actor moves forward and turns across all five commands. Its forward mean body vx is 0.713 m/s for a 0.8 m/s request, but XY RMSE is 0.226 m/s and yaw RMSE 1.470 rad/s, worse than PPO's 0.159 / 0.335. It makes 92/105 foot liftoffs in 18 steady seconds, with 0.469 m/s foot-slip RMS and 82.1 rad/s² joint acceleration RMS (PPO: 0.134 / 27.6). This is stable motion, not accepted smooth command tracking. Continued AMP learning is needed; survival alone does not establish success.
 
 The saved 2000 checkpoint contains 5,251,072 real transitions and 1386.34 s cumulative trainer time. Including the earlier failed compilation process and both launches gives 1584.04 s (26.40 min) to the saved checkpoint, versus 8196.95 s for PPO 1500. These are costs to different quality levels, not a time-to-equivalent-quality result. Full process termination took slightly longer due to checkpoint/log synchronization.
 
