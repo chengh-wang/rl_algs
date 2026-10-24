@@ -48,6 +48,9 @@ Requested plots: reward versus wall-clock time and each velocity RMSE versus
 wall-clock time, all three methods on common axes. Plot identical deterministic
 evaluation returns as the primary reward comparison, with native training
 episodic reward separately (its distribution changes with policy and curriculum).
+MJLab logs each `Episode_Reward` sum divided by the configured maximum episode
+seconds, including for early terminations. The auxiliary training plot preserves
+this native normalization; it is not return divided by actual episode duration.
 Include total process elapsed and elapsed excluding evaluation versions; the
 latter still includes imports, setup, compilation, diagnostics and checkpoint
 I/O, so it is not pure learner time. Never relabel the

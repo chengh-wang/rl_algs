@@ -23,7 +23,7 @@ def run_summary(path, rows):
 
 
 def training_rewards(runs, summaries, output):
-    """Native episode reward rates; commands/episode lengths depend on policy."""
+    """Native episode reward divided by the configured maximum episode time."""
     from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
     fig,ax=plt.subplots(figsize=(9,4.8),layout='constrained');records=[]
     for path,summary in zip(runs,summaries):
@@ -46,7 +46,7 @@ def training_rewards(runs, summaries, output):
         ax.plot([r['total_process_s']/60 for r in rows],
                 [r['episode_reward_rate'] for r in rows],label=label,lw=1)
         records.extend(rows)
-    ax.set(xlabel='Total process elapsed (minutes)',ylabel='Native episode reward rate (reward/s)',
+    ax.set(xlabel='Total process elapsed (minutes)',ylabel='Episode reward / maximum episode seconds',
            title='Training episodes: policy-dependent command curriculum and episode lengths')
     ax.grid(alpha=.25);ax.legend();fig.savefig(output/'training_episode_rewards.png',dpi=180);plt.close(fig)
     (output/'training_episode_rewards.json').write_text(json.dumps(records,indent=2)+'\n')
