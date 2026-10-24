@@ -18,6 +18,11 @@ Algorithms retain their documented architectures/update schedules. These
 differences are reported, so this is an end-to-end method benchmark, not an
 isolated actor-gradient ablation. G1 is a second transfer test.
 
+All methods reuse installed SDKs and available Warp/Inductor compilation caches.
+Compilation that actually executes is included in the elapsed timers. Every
+formal trial still has fresh learned parameters, optimizers, statistics and
+replay; previous training supplies no learned state.
+
 Evaluation: 20 s from standing, no resets, no noise/push/startup DR; commands
 `[0,0,0]`, `[0.8,0,0]`, `[-0.5,0,0]`, `[0,0.5,0]`, `[0,0,0.5]`, eight replicas
 each. Exclude only first 2 s, never post-failure samples. Root-body-frame velocity
