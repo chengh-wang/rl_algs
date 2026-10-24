@@ -32,8 +32,16 @@ standing (XY0.47737 m/s, return90.98); update2150 first passed every command. Th
 observes earlier acceptance than MBDAC, later acceptance than source FastSAC,
 and fewer real transitions than either. Sparse evaluation cadence, one seed
 and the integration differences below limit that comparison. The WM-disabled
-control and G1 task are still pending. No overall WM wall-clock advantage over
+control has also passed twice; G1 is running. No overall WM wall-clock advantage over
 upstream FastSAC has been demonstrated.
+
+The integration-matched real-only control first passes at611.74 s excluding
+evaluation,641.65 s through result availability, and2,909,184 real transitions
+(update2830): XY RMSE0.06132 m/s, yaw RMSE0.05532 rad/s. Its second pass is at
+update4260, XY0.06376 m/s and yaw0.04291 rad/s. The hybrid therefore has no
+observed online wall-clock advantage over this control either. Sparse wall-time
+sampling can alter the apparent sample-efficiency ranking; a separate systematic
+evaluation of saved checkpoints is queued and will preserve the original rows.
 
 ## Costs and retained failures
 
@@ -46,10 +54,11 @@ upstream FastSAC has been demonstrated.
 | WMFastSAC v1 | 526.119 | Not recorded | 1,980,416 | Excluded: predicted contacts used for real Q |
 | WMFastSAC v2 | 1000.640 | Not recorded | 3,062,784 | Model-only pilot; stopped after heading issue |
 | WMFastSAC v3 | 1265.788 | 1293.241 | 2,868,224 | Primary hybrid; stable acceptance |
+| Real-only v3 | 954.068 | 962.384 | 4,373,504 | Integration-matched control; stable acceptance |
 
-Completed full-size trials used at least7519.95 process seconds (125.33 min),
+Completed full-size trials used at least8482.33 process seconds (141.37 min),
 including exact subprocess cleanup where recorded. Ten additional smokes add
-57.76 s, making a lower bound of126.30 min. This excludes the running real-only control,
+57.76 s, making a lower bound of142.33 min. This excludes the running G1 trial,
 tests, engineering, offline evaluations and rendering. Missing cleanup timers
 remain unknown; file modification times are not substituted for measurements.
 No pilot checkpoints initialize the formal runs.
@@ -64,7 +73,7 @@ builder is queued after the live matrix, with no GPU overlap with training.
 This is a one-seed nominal laptop benchmark of complete recipes. The native
 physics, rewards, commands, noise, termination and evaluation protocol match;
 network widths, optimizers and update schedules differ and are documented.
-The separately queued real-only control uses the hybrid's integration without
+The real-only control uses the hybrid's integration without
 WM updates to help separate those effects. Forty deterministic replicas are
 repeatability copies, not 40 independent randomized starts. G1 reuses the same
 configuration in fresh training; it does not reuse learned weights.
