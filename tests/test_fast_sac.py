@@ -124,3 +124,22 @@ def test_real_q_uses_adapter_next_command_instead_of_imagined_clock():
         alg.process_env_step(obs,r,d,extra)
     tr,_,_,condition1=alg._real_batch(32)
     assert torch.equal(condition1,tr['condition1']) and (condition1==7).all()
+
+
+def test_model_weight_zero_avoids_model_and_mixture_preserves_input_gradients():
+    env=ToyEnv();cfg=config();cfg.fast_sac['model_actor_weight']=0.
+    alg=MBDACFastSAC(env.model_task,4,cfg);fill(alg,env)
+    original=alg._wm_step
+    def forbidden(*args): raise AssertionError('Zero model weight must not evaluate model')
+    alg._wm_step=forbidden
+    logs=alg.update_actor()
+    assert 'real_actor_loss' in logs and 'model_actor_loss' not in logs
+    alg._wm_step=original;alg.cfg.fast_sac['model_actor_weight']=.1
+    alg.update_world_model();seen=[]
+    def track(module,args,output):
+        if output.requires_grad: output.register_hook(lambda g:seen.append(float(g.abs().sum())))
+    handle=alg.world_model.net.register_forward_hook(track)
+    before=copy.deepcopy(alg.world_model.state_dict());logs=alg.update_actor();handle.remove()
+    assert 'real_actor_loss' in logs and 'model_actor_loss' in logs and any(v>0 for v in seen)
+    assert abs(logs['actor_loss']-(.1*logs['model_actor_loss']+.9*logs['real_actor_loss']))<1e-6
+    assert all(torch.equal(v,alg.world_model.state_dict()[k]) for k,v in before.items())

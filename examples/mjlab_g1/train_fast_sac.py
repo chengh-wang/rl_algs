@@ -57,6 +57,9 @@ def main():
     group.add_argument('--wm-checkpoint',type=Path,help='Warm-start only a compatible G1 physical WM; actor/Q/temperature start fresh')
     p.add_argument('--critic-batch',type=int)
     p.add_argument('--wm-only-iters',type=int)
+    p.add_argument('--model-actor-weight',type=float)
+    p.add_argument('--log-std-min',type=float)
+    p.add_argument('--log-std-max',type=float)
     p.add_argument('--compile',action='store_true');p.add_argument('--smoke',action='store_true')
     args=p.parse_args()
     if args.log_dir.exists() and (args.log_dir/'config.json').exists() and not args.resume:
@@ -70,6 +73,9 @@ def main():
     cfg.update(seed=args.seed,num_envs=args.num_envs,motion_dir=str(motion_file.parent.resolve()))
     if args.critic_batch is not None: cfg['algorithm']['fast_sac']['critic_batch']=args.critic_batch
     if args.wm_only_iters is not None: cfg['algorithm']['wm_only_iters']=args.wm_only_iters
+    for name in ('model_actor_weight','log_std_min','log_std_max'):
+        value=getattr(args,name)
+        if value is not None: cfg['algorithm']['fast_sac'][name]=value
     cfg['initialized_from']='scratch'
     if args.wm_checkpoint:
         cfg['initialized_from']=dict(world_model=str(args.wm_checkpoint.resolve()),
@@ -90,6 +96,9 @@ def main():
                 raise ValueError('Full resume requires the identical reference subset; use a WM-only warm start for another clip')
             for key,value in saved['cfg']['algorithm'].items():
                 if key=='compile': continue
+                if key=='fast_sac':
+                    from mbdac.algorithms.mbdac_fast_sac import FAST_SAC_DEFAULTS
+                    value={**FAST_SAC_DEFAULTS,**value}
                 if runner.cfg['algorithm'].get(key)!=value:
                     raise ValueError(f'Full resume changes algorithm option {key}; pass the original settings')
             runner.load(args.resume)

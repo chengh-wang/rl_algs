@@ -18,7 +18,7 @@ FAST_SAC_DEFAULTS=dict(actor_hidden_dim=512,critic_hidden_dim=768,num_atoms=501,
     actor_lr=3e-4,critic_lr=3e-4,alpha_lr=3e-4,alpha_init=.001,
     target_entropy_ratio=.5,tau=.05,critic_updates=4,policy_frequency=2,
     critic_batch=256,actor_grad_clip=1.,critic_grad_clip=0.,action_scale=1.,
-    weight_decay=.001,alpha_weight_decay=.01)
+    weight_decay=.001,alpha_weight_decay=.01,model_actor_weight=1.)
 
 
 @dataclass
@@ -43,6 +43,8 @@ class MBDACFastSAC(MBDAC):
                 f['num_q_networks']<1 or f['critic_batch']<1 or f['actor_hidden_dim']<4 or f['critic_hidden_dim']<4 or
                 f['log_std_min']>f['log_std_max'] or min(f['actor_lr'],f['critic_lr'],f['alpha_lr'])<=0):
             raise ValueError('Invalid FastSAC horizon, update schedule or value support')
+        if not 0<=f['model_actor_weight']<=1:
+            raise ValueError('model_actor_weight must be in [0,1]')
         super().__init__(task,num_envs,cfg,device)
         self.opt_actor=torch.optim.AdamW(self.actor.parameters(),lr=f['actor_lr'],betas=(.9,.95),weight_decay=f['weight_decay'])
         self.opt_critic=torch.optim.AdamW(self.critic.parameters(),lr=f['critic_lr'],betas=(.9,.95),weight_decay=f['weight_decay'])
@@ -166,13 +168,23 @@ class MBDACFastSAC(MBDAC):
         self.opt_wm.zero_grad(set_to_none=True); self.opt_critic.zero_grad(set_to_none=True)
         self.opt_alpha.zero_grad(set_to_none=True)
         with frozen(self.world_model,self.critic):
-            objective,logs=self.actor_objective(start,history)
+            weight=self.cfg.fast_sac['model_actor_weight']
+            logs={}
+            if weight>0 or self.cfg.horizon==0:
+                objective,logs=self.actor_objective(start,history)
+                logs['model_actor_loss']=float(-objective.detach())
+            if weight<1 and self.cfg.horizon>0:
+                action,logp=self.actor.sample(history,self.task.goal(start['condition']))
+                value=self.critic.value(self._critic_features(start['s'],start['condition'],start['context']),action)
+                real_objective=(value-self.log_alpha.exp().detach()*logp).mean()
+                objective=weight*objective+(1-weight)*real_objective if weight else real_objective
+                logs.update(real_actor_loss=float(-real_objective.detach()),real_actor_entropy=float(-logp.detach().mean()))
             loss=-objective
             self.opt_actor.zero_grad(set_to_none=True); loss.backward()
             norm=nn.utils.clip_grad_norm_(self.actor.parameters(),self.cfg.fast_sac['actor_grad_clip'] or float('inf'),error_if_nonfinite=True)
             self.opt_actor.step()
         self.actor_updates+=1
-        return {**logs,'actor_loss':float(loss.detach()),'actor_grad_norm':float(norm)}
+        return {**logs,'actor_loss':float(loss.detach()),'actor_grad_norm':float(norm),'model_actor_weight':weight}
 
     def update(self, iteration=0):
         c=self.cfg; factor=.03+.97*.5*(1+math.cos(math.pi*min(iteration/c.lr_decay_iters,1)))
