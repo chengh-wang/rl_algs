@@ -88,6 +88,24 @@ def test_inference_does_not_change_training_mode_or_statistics():
     assert all(torch.equal(v,runner.alg.actor.state_dict()[k]) for k,v in before.items())
 
 
+def test_cpu_inference_accepts_gpu_environment_reset_mask():
+    import pytest
+    from dataclasses import asdict
+    if not torch.cuda.is_available(): pytest.skip('Cross-device reset requires CUDA')
+    runner=ModelBasedRunner(ToyEnv(),{'algorithm':{'class_name':'MBDAC',**asdict(config())}})
+    for policy_device,mask_device in [('cpu','cuda'),('cuda','cpu')]:
+        policy=runner.get_inference_policy(policy_device)
+        obs=lambda value:TensorDict(dict(actor=torch.full((4,2),value,device=policy_device),
+                                        goal=torch.ones(4,1,device=policy_device)),batch_size=[4])
+        policy(obs(1.)); policy(obs(2.))
+        policy.reset(torch.tensor([True,False,True,False],device=mask_device))
+        action=policy(obs(3.))
+        expected=torch.tensor([[[3.,3.],[3.,3.]],[[2.,2.],[3.,3.]],
+                               [[3.,3.],[3.,3.]],[[2.,2.],[3.,3.]]],device=policy_device)
+        assert torch.equal(policy.history,expected)
+        assert action.device.type==policy_device and not action.requires_grad
+
+
 def test_amp_update_only_changes_discriminator():
     env=ToyEnv(); cfg=config(); cfg.amp={'hidden':(16,)}; alg=MBDACAMP(env.model_task,4,cfg); fill(alg,env)
     actor=copy.deepcopy(alg.actor.state_dict()); wm=copy.deepcopy(alg.world_model.state_dict())

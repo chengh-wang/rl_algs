@@ -30,7 +30,7 @@ class InferencePolicy(nn.Module):
         else:
             self.history=torch.cat((self.history[:,1:],o[:,None]),1)
             if self.fresh is not None:
-                self.history=torch.where(self.fresh[:,None,None],o[:,None].expand_as(self.history),self.history)
+                self.history=torch.where(self.fresh.to(o.device)[:,None,None],o[:,None].expand_as(self.history),self.history)
         self.fresh=None
         return self.actor(self.history,obs['goal'])
 
