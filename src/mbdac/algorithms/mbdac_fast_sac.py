@@ -80,11 +80,17 @@ class MBDACFastSAC(MBDAC):
     def process_env_step(self, obs, rewards, dones, extras):
         tr={**extras['model_transition'],'reward':rewards.detach().clone()}
         super().process_env_step(obs,rewards,dones,{**extras,'model_transition':tr})
-        c1=self.task.advance(tr['condition'],state=tr['s1'],context=tr['context'])
+        c1=self._next_condition(tr)
         current=self._critic_features(tr['s'],tr['condition'],tr['context'])
         future=self._critic_features(tr['s1'],c1,tr['context'])
         self.critic.norm.update(torch.cat((current,future)))
         self.target_critic.norm.load_state_dict(self.critic.norm.state_dict())
+
+    def _next_condition(self, transition):
+        # Exogenous command changes belong to the adapter, not the dynamics WM.
+        # Deterministic motion clocks can use the analytic advance fallback.
+        if 'condition1' in transition: return transition['condition1']
+        return self.task.advance(transition['condition'],state=transition['s1'],context=transition['context'])
 
     def _history(self, history):
         return self.task.add_noise(self.task.observation(history['s'],history['a_prev'],history['context'],
@@ -94,7 +100,7 @@ class MBDACFastSAC(MBDAC):
     def _real_batch(self, batch):
         tr,h=self.replay.sample_starts(batch,self.cfg.history)
         hist=self._history(h)
-        cond1=self.task.advance(tr['condition'],state=tr['s1'],context=tr['context'])
+        cond1=self._next_condition(tr)
         obs1=self.task.add_noise(self.task.observation(tr['s1'],tr['a'],tr['context'],cond1,
                                   primitives=self._primitives(tr['s1'],tr['context'])))
         return tr,hist,torch.cat((hist[:,1:],obs1[:,None]),1),cond1

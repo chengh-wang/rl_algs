@@ -114,3 +114,13 @@ def test_schedule_and_full_runner_resume_export(tmp_path):
     exported=resumed.export_jit(tmp_path/'policy.pt')
     history=torch.randn(5,2,2);goal=torch.ones(5,1)
     assert torch.allclose(exported(history,goal),resumed.alg.actor(history,goal),atol=1e-6)
+
+
+def test_real_q_uses_adapter_next_command_instead_of_imagined_clock():
+    env=ToyEnv();alg=MBDACFastSAC(env.model_task,4,config())
+    for _ in range(6):
+        action=alg.act(env.get_observations());obs,r,d,extra=env.step(action)
+        extra['model_transition']['condition1']=torch.full((4,1),7.)
+        alg.process_env_step(obs,r,d,extra)
+    tr,_,_,condition1=alg._real_batch(32)
+    assert torch.equal(condition1,tr['condition1']) and (condition1==7).all()
