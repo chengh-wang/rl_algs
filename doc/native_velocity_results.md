@@ -14,7 +14,7 @@ All networks, normalizers, optimizers and replay buffers start fresh.
 | WM + FastSAC hybrid | 914.48 s | 955.46 s | 0.07986 | 0.07416 | 2,212,864 |
 
 All thresholds must pass separately for every command and all 40
-nominal worlds must survive. Both completed methods pass again at the next
+nominal worlds must survive. All three methods pass again at the next
 evaluation. The code's `converged` label means this operational stopping rule,
 not a claim of statistical convergence or optimal reward.
 
@@ -25,9 +25,10 @@ excluding evaluation includes imports, setup, compilation, diagnostics and
 checkpoint I/O. Full elapsed at result availability is recorded separately.
 The source baseline is pinned to Holosoma commit `d18d6cc50f872c15e904a22ceac22313cec955c8`.
 
-The hybrid is still running pending the next stability evaluation. Its first
-training evaluation at311.65 active seconds was standing (XY0.47737 m/s,
-return90.98). At update2150 it passes every command in real physics. This pilot
+The hybrid passed its second stability evaluation at update2790, with
+XY RMSE0.07225 m/s, yaw RMSE0.05415 rad/s and survival1.0. Training stopped by
+the declared rule. Its first training evaluation at311.65 active seconds was
+standing (XY0.47737 m/s, return90.98); update2150 first passed every command. This pilot
 observes earlier acceptance than MBDAC, later acceptance than source FastSAC,
 and fewer real transitions than either. Sparse evaluation cadence, one seed
 and the integration differences below limit that comparison. The WM-disabled
@@ -44,10 +45,11 @@ upstream FastSAC has been demonstrated.
 | MBDAC v3 | 2862.403 | 2900.457 | 10,151,936 | Primary; stable acceptance |
 | WMFastSAC v1 | 526.119 | Not recorded | 1,980,416 | Excluded: predicted contacts used for real Q |
 | WMFastSAC v2 | 1000.640 | Not recorded | 3,062,784 | Model-only pilot; stopped after heading issue |
+| WMFastSAC v3 | 1265.788 | 1293.241 | 2,868,224 | Primary hybrid; stable acceptance |
 
-Completed full-size trials used at least6226.70 process seconds (103.78 min),
+Completed full-size trials used at least7519.95 process seconds (125.33 min),
 including exact subprocess cleanup where recorded. Ten additional smokes add
-57.76 s, making a lower bound of104.74 min. This excludes the running hybrid,
+57.76 s, making a lower bound of126.30 min. This excludes the running real-only control,
 tests, engineering, offline evaluations and rendering. Missing cleanup timers
 remain unknown; file modification times are not substituted for measurements.
 No pilot checkpoints initialize the formal runs.
