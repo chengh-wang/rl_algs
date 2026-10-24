@@ -198,6 +198,16 @@ class MBDACFastSAC(MBDAC):
         self.actor_updates+=1
         return {**logs,'actor_loss':float(loss.detach()),'actor_grad_norm':float(norm),'model_actor_weight':weight}
 
+    def update_actor_critic(self):
+        """Common learner entry point, using real Q fits and model policy steps."""
+        c=self.cfg;rows=[]
+        for _ in range(c.fast_sac['critic_updates']):
+            row=self.update_real_critic()
+            if self.critic_updates%c.fast_sac['policy_frequency']==0: row.update(self.update_actor())
+            rows.append(row)
+        return {key:sum(r[key] for r in rows if key in r)/sum(key in r for r in rows)
+                for key in set().union(*(r.keys() for r in rows))}
+
     def update(self, iteration=0):
         c=self.cfg; factor=.03+.97*.5*(1+math.cos(math.pi*min(iteration/c.lr_decay_iters,1)))
         self.learning_rate=c.lr*factor
@@ -206,13 +216,7 @@ class MBDACFastSAC(MBDAC):
         for _ in range(c.wm_batches):
             for k,v in self.update_world_model().items(): logs[k]=logs.get(k,0.)+v/c.wm_batches
         if iteration>=c.wm_only_iters:
-            rows=[]
-            for _ in range(c.fast_sac['critic_updates']):
-                row=self.update_real_critic()
-                if self.critic_updates%c.fast_sac['policy_frequency']==0: row.update(self.update_actor())
-                rows.append(row)
-            for key in set().union(*(r.keys() for r in rows)):
-                logs[key]=sum(r[key] for r in rows if key in r)/sum(key in r for r in rows)
+            logs.update(self.update_actor_critic())
         return {**logs,'optimizer/critic_updates':self.critic_updates,'optimizer/actor_updates':self.actor_updates,
                 'actor_learning_rate':self.opt_actor.param_groups[0]['lr']}
 
