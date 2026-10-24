@@ -91,6 +91,11 @@ The [MBDAC review](doc/mbdac_audit_2026-10-24.md) records numerical equivalence,
 
 The observed velocity baseline used a different task, AMP+PPO and hardware load. Timing a few tracking updates does not establish an advantage over that baseline. The [matched velocity benchmark](doc/velocity_benchmark.md) reuses the retained baseline's native MJLab task and expert loader; native learning quality and speed comparisons remain acceptance items. See [current measured progress](doc/progress_2026-10-24.md).
 
+The first [matched AMP results](doc/velocity_results_2026-10-24.md) include actual
+1000/1500/2000 checkpoint evaluations. At 2000 the actor survives all five 20 s
+cases, but velocity conditioning, yaw and gait quality remain insufficient. The
+shorter training time is therefore not an advantage at matched policy quality.
+
 ## Design contract
 
 - Core learning code imports neither MJLab nor Isaac Lab.
