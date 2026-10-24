@@ -9,15 +9,30 @@ from .model_task import BaselineVelocityTask
 
 def main():
     p=argparse.ArgumentParser(); p.add_argument('--output',type=Path,default=Path('logs/velocity_validation.json'))
-    args=p.parse_args(); native=BaselineVelocityEnv(32); task=BaselineVelocityTask(native)
+    args=p.parse_args()
+    from src.tasks.amp_loco.config.g1.env_cfgs import g1_amp_flat_env_cfg
+    cfg=g1_amp_flat_env_cfg()
+    for group in cfg.observations.values(): group.enable_corruption=False
+    native=BaselineVelocityEnv(32,cfg=cfg); task=BaselineVelocityTask(native)
     native.model_task=task; env=VelocityModelAdapter(native,task); native.audit_snapshots=True
     try:
         with torch.no_grad():
+            def analytic_observation_error():
+                actual=native.obs_buf['actor'].reshape(32,-1,task.obs_dim)[:,-1]
+                predicted=task.observation(native.physical_state(),native.action_manager.action,
+                                           native.physical_context(),native.condition())
+                bounds={'gyro':(0,3),'gravity':(3,6),'command':(6,9),'joint_position':(9,38),
+                        'joint_velocity':(38,67),'previous_action':(67,96)}
+                return {name:float((actual[:,a:b]-predicted[:,a:b]).abs().max()) for name,(a,b) in bounds.items()}
+            analytic_observation_errors=analytic_observation_error()
             native_actor=native.obs_buf['actor'].reshape(32,-1,task.obs_dim)[:,-1]
             observation_error=float((native_actor-env.get_observations()['actor']).abs().max())
             assert observation_error==0.
             action=torch.randn(32,29,device=native.device)*.1
             _,r,_,extras=env.step(action); r=r.clone()
+            after_step=analytic_observation_error()
+            analytic_observation_errors={name:max(value,after_step[name]) for name,value in analytic_observation_errors.items()}
+            assert max(analytic_observation_errors.values())<3e-5,analytic_observation_errors
             tr=extras['model_transition']; c=tr['condition_reward']
             labels={k.split('/',1)[1]:v for k,v in tr.items() if k.startswith('primitive/')}
             reward,terms=task.reward(tr['s1'],c,tr['a'],tr['a_prev'],labels,tr['s'],soft=False,overrides=native.audit_snapshot,terms=True)
@@ -54,6 +69,7 @@ def main():
             assert pre_reset_gap>.1,pre_reset_gap
         result=dict(native_task='Unitree-G1-AMP-Flat',num_envs=32,reward_formula_max_abs=errors,
                     native_observation_max_abs=observation_error,
+                    analytic_observation_term_max_abs=analytic_observation_errors,
                     amp_feature_max_abs=amp_error,forced_terminal_capture=True,pre_reset_min_height_gap_m=pre_reset_gap,
                     soft_imagined_reward_max_abs=float((reward.detach()-r).abs().max()),
                     hard_reward_total_max_abs=float((sum(terms.values())-r).abs().max()),
