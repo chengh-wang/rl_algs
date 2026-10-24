@@ -20,6 +20,39 @@ def config(horizon=2):
             critic_hidden_dim=16,num_atoms=21,critic_batch=8,critic_updates=2))
 
 
+def test_real_q_and_real_actor_use_measured_features_without_calling_model_head():
+    from test_core import ToyTask
+    env=ToyEnv();env.model_task=ToyTask();step=env.step
+    def wrapped(action):
+        obs,r,d,extras=step(action);tr=extras['model_transition']
+        tr['critic_features']=torch.cat((tr['s'],tr['condition'],tr['context']),-1)+10
+        tr['next_critic_features']=torch.cat((tr['s1'],tr['condition'],tr['context']),-1)+10
+        return obs,r,d,extras
+    env.step=wrapped
+    cfg=config(0);alg=MBDACFastSAC(env.model_task,4,cfg)
+    def forbidden(*args,**kwargs):raise RuntimeError('Predicted physical critic feature was requested')
+    env.model_task.critic_features=forbidden
+    # Collection normalization and real C51 / H=0 actor must use native values.
+    fill(alg,env);alg.update_real_critic();alg.update_actor()
+    alg.cfg.horizon=1
+    start,h=alg._sample_starts()
+    import pytest
+    with pytest.raises(RuntimeError,match='Predicted physical critic feature'):
+        alg.actor_objective(start,alg._history(h))
+
+
+def test_real_q_warmup_can_finish_before_model_actor_starts():
+    for warmup in (3,4):
+        env=ToyEnv();cfg=config();cfg.wm_only_iters=4
+        cfg.fast_sac.update(pretrain_critic_during_wm_warmup=True,critic_warmup_updates=warmup)
+        alg=MBDACFastSAC(env.model_task,4,cfg);fill(alg,env)
+        alg.update(0);alg.update(1)
+        assert alg.critic_updates==0 and alg.actor_updates==0
+        alg.update(2);assert alg.critic_updates==2 and alg.actor_updates==0
+        alg.update(3);assert alg.critic_updates==warmup and alg.actor_updates==0
+        alg.update(4);assert alg.critic_updates==warmup+2 and alg.actor_updates==1
+
+
 def test_vendored_actor_critic_are_exact_pinned_source():
     from mbdac.vendor.holosoma import fast_sac
     path=Path(fast_sac.__file__)

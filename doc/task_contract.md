@@ -18,6 +18,27 @@ termination_probability(state1, condition1, primitives=None)
 critic_features(state, condition, context, primitives=None)
 ```
 
+An optional `controlled_critic_features(state, condition, context,
+previous_action, history=None, primitives=None)` adds the controller's known
+memory in the same `critic_dim` convention. MBDAC V uses previous applied action
+at its terminal state and detached value targets; FastSAC Q also supplies actor
+history. Existing tasks without the hook retain their previous behavior.
+
+FastSAC adapters can provide the paired `model_transition['critic_features']`
+and `['next_critic_features']` tensors, each `[num_envs, critic_dim]`, measured in
+exactly that task convention. Current values describe the policy's current
+native privileged observation. Next values describe the real next observation,
+with a physical terminal value before auto-reset for reset rows. Real Q fitting,
+normalizer updates, and real/H=0 actor terms then use those measurements directly.
+Imagined states still use analytic/predicted physical heads. This prevents
+silently replacing actual contact sensors with a learned contact estimate on
+real replay. Supply both fields or neither; keep schemas stable through replay.
+
+Native MJLab velocity uses `q_target = offset + scale * raw_action - encoder_bias`
+in the native action term's `target_ids` ordering. Its actor uses the native
+unbiased joint-position observation. These conventions differ from any example
+that explicitly defines an additive calibration offset.
+
 `condition` can be a motion frame index, velocity command, or another task-specific tensor. Keep exogenous commands separate from physical state. Analytic functions must preserve gradients through their physical inputs. Imagined termination is a smooth probability; the real simulator can use hard thresholds. The task owns reward units and timestep scaling.
 
 The optional [physical-signal registry](general_task_interface.md) generates learned-head declarations and captures pre-reset measurement labels from registered dependencies. Analytic providers take precedence, and changing reward scales does not change these physical targets.

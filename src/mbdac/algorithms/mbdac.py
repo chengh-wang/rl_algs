@@ -172,8 +172,11 @@ class MBDAC:
             primitives.update(self.world_model.transition_primitives(state0,action,state,self.task.normalize_context(context)))
         return self.task.reward(state,condition,action,previous,primitives=primitives,previous_state=state0)
 
-    def _critic_features(self,state,condition,context):
-        return self.task.critic_features(state,condition,context,primitives=self._primitives(state,context))
+    def _critic_features(self,state,condition,context,previous_action=None,history=None):
+        primitives=self._primitives(state,context)
+        if previous_action is not None and hasattr(self.task,'controlled_critic_features'):
+            return self.task.controlled_critic_features(state,condition,context,previous_action,history,primitives=primitives)
+        return self.task.critic_features(state,condition,context,primitives=primitives)
 
     def _reward_and_termination(self,state,condition,action,previous,state0,context):
         return (self._reward(state,condition,action,previous,state0,context),
@@ -205,7 +208,7 @@ class MBDAC:
             r,d=r.reshape(c.horizon,-1),d.reshape(c.horizon,-1)
             alive=torch.cumprod(1-d,0); ct=torch.cat((torch.ones_like(alive[:1]),alive[:-1]),0)
             discount=c.gamma**torch.arange(c.horizon,device=self.device)[:,None]
-            terminal=self.critic(self._critic_input(s,cond,ctx))
+            terminal=self.critic(self._critic_input(s,cond,ctx,previous_action=a_prev))
             objective=(discount*ct*r).sum(0)+c.gamma**c.horizon*alive[-1]*terminal
             loss=-objective.mean()
             self.opt_actor.zero_grad(set_to_none=True); loss.backward()
@@ -213,7 +216,8 @@ class MBDAC:
             nn.utils.clip_grad_value_(self.actor.parameters(),.1); self.opt_actor.step()
         with torch.no_grad():
             all_ctx=ctx[None].expand(c.horizon+1,*ctx.shape).flatten(0,1)
-            x=self._critic_input(flat([st.detach() for st in states]),flat(conditions),all_ctx).reshape(c.horizon+1,c.pi_batch,-1)
+            all_previous=flat([start['a_prev']]+[a.detach() for a in actions])
+            x=self._critic_input(flat([st.detach() for st in states]),flat(conditions),all_ctx,previous_action=all_previous).reshape(c.horizon+1,c.pi_batch,-1)
             self.critic.norm.update(x); values=self.critic(x)
             targets=lambda_returns(r.detach(),d.detach(),values,c.gamma,c.lam)
         xf,yf=x[:-1].flatten(0,1),targets.flatten(); n=len(yf); vloss=0.

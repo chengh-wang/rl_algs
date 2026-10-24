@@ -20,7 +20,8 @@ FAST_SAC_DEFAULTS=dict(actor_hidden_dim=512,critic_hidden_dim=768,num_atoms=501,
     critic_batch=256,actor_grad_clip=1.,critic_grad_clip=0.,action_scale=1.,
     weight_decay=.001,alpha_weight_decay=.01,model_actor_weight=1.,
     action_std_min=None,action_std_max=None,real_actor_batch=None,
-    critic_warmup_updates=0)
+    critic_warmup_updates=0,precision='fp32',fused_optimizers=False,
+    pretrain_critic_during_wm_warmup=False)
 
 
 @dataclass
@@ -36,6 +37,9 @@ class MBDACFastSAC(MBDAC):
         if unknown: raise ValueError(f'Unknown FastSAC options: {sorted(unknown)}')
         cfg.fast_sac={**FAST_SAC_DEFAULTS,**cfg.fast_sac}
         f=cfg.fast_sac
+        if f['precision'] not in ('fp32','bf16'):raise ValueError('FastSAC precision must be fp32 or bf16')
+        if f['fused_optimizers'] and not str(device).startswith('cuda'):
+            raise ValueError('Fused FastSAC optimizers require a CUDA device')
         bounds=torch.as_tensor(f['action_scale'],dtype=torch.float32)
         if (not torch.isfinite(bounds).all() or (bounds<=0).any() or
                 bounds.numel() not in (1,task.action_dim) or bounds.max()>cfg.action_clip):
@@ -59,11 +63,11 @@ class MBDACFastSAC(MBDAC):
                     not torch.isfinite(lo).all() or not torch.isfinite(hi).all() or (lo<=0).any() or (hi<lo).any()):
                 raise ValueError('Invalid raw-action standard deviation bounds')
         super().__init__(task,num_envs,cfg,device)
-        self.opt_actor=torch.optim.AdamW(self.actor.parameters(),lr=f['actor_lr'],betas=(.9,.95),weight_decay=f['weight_decay'])
-        self.opt_critic=torch.optim.AdamW(self.critic.parameters(),lr=f['critic_lr'],betas=(.9,.95),weight_decay=f['weight_decay'])
+        self.opt_actor=torch.optim.AdamW(self.actor.parameters(),lr=f['actor_lr'],betas=(.9,.95),weight_decay=f['weight_decay'],fused=f['fused_optimizers'])
+        self.opt_critic=torch.optim.AdamW(self.critic.parameters(),lr=f['critic_lr'],betas=(.9,.95),weight_decay=f['weight_decay'],fused=f['fused_optimizers'])
         self.target_critic=copy.deepcopy(self.critic).eval().requires_grad_(False)
         self.log_alpha=nn.Parameter(torch.tensor([math.log(f['alpha_init'])],device=self.device))
-        self.opt_alpha=torch.optim.AdamW([self.log_alpha],lr=f['alpha_lr'],betas=(.9,.95),weight_decay=f['alpha_weight_decay'])
+        self.opt_alpha=torch.optim.AdamW([self.log_alpha],lr=f['alpha_lr'],betas=(.9,.95),weight_decay=f['alpha_weight_decay'],fused=f['fused_optimizers'])
         self.target_entropy=-task.action_dim*f['target_entropy_ratio']
         self.critic_updates=0; self.actor_updates=0
 
@@ -97,6 +101,8 @@ class MBDACFastSAC(MBDAC):
     @torch.no_grad()
     def process_env_step(self, obs, rewards, dones, extras):
         tr={**extras['model_transition'],'reward':rewards.detach().clone()}
+        if ('critic_features' in tr)!=('next_critic_features' in tr):
+            raise ValueError('Measured critic features require both current and physical-next values')
         c1=self._next_condition(tr)
         labels={k.split('/',1)[1]:v for k,v in tr.items() if k.startswith('primitive/')}
         physical_obs=self.task.observation(tr['s1'],tr['a'],tr['context'],c1,primitives=labels)
@@ -111,15 +117,21 @@ class MBDACFastSAC(MBDAC):
         # being a true finite-horizon endpoint (unlike an arbitrary time limit).
         if hasattr(self.task,'bootstrap_mask') and 'bootstrap' not in tr:
             tr['bootstrap']=self.task.bootstrap_mask(tr['s1'],c1).detach().clone()
-        current=self._q_features(tr['s'],tr['condition'],tr['context'],tr['a_prev'],self.history)
+        current=self._q_features(tr['s'],tr['condition'],tr['context'],tr['a_prev'],self.history,tr.get('critic_features'))
         next_history=torch.cat((self.history[:,1:],next_obs[:,None]),1)
-        future=self._q_features(tr['s1'],c1,tr['context'],tr['a'],next_history)
+        future=self._q_features(tr['s1'],c1,tr['context'],tr['a'],next_history,tr.get('next_critic_features'))
         super().process_env_step(obs,rewards,dones,{**extras,'model_transition':tr})
         self.critic.norm.update(torch.cat((current,future)))
         self.target_critic.norm.load_state_dict(self.critic.norm.state_dict())
 
-    def _q_features(self, state, condition, context, previous_action, history):
-        return torch.cat((self._critic_features(state,condition,context),previous_action,history.flatten(-2)),-1)
+    def _q_features(self, state, condition, context, previous_action, history, observed=None):
+        # Optional adapter measurements must be in the task's critic-feature
+        # convention. Never replace real contact sensors with learned WM heads.
+        if observed is None:
+            observed=self._critic_features(state,condition,context,previous_action,history)
+        elif observed.shape!=(*state.shape[:-1],self.task.critic_dim):
+            raise ValueError('Observed critic features do not match the task contract')
+        return torch.cat((observed,previous_action,history.flatten(-2)),-1)
 
     def _sample_replay_starts(self, batch, history):
         return self.replay.sample_starts(batch,history,full_history=True)
@@ -147,8 +159,8 @@ class MBDACFastSAC(MBDAC):
         f=self.cfg.fast_sac
         tr,hist,next_hist,cond1=self._real_batch(f['critic_batch'])
         with torch.no_grad():
-            features=self._q_features(tr['s'],tr['condition'],tr['context'],tr['a_prev'],hist)
-            next_features=self._q_features(tr['s1'],cond1,tr['context'],tr['a'],next_hist)
+            features=self._q_features(tr['s'],tr['condition'],tr['context'],tr['a_prev'],hist,tr.get('critic_features'))
+            next_features=self._q_features(tr['s1'],cond1,tr['context'],tr['a'],next_hist,tr.get('next_critic_features'))
             action1,logp1=self.actor.sample(next_hist,self.task.goal(cond1))
             # True terminations stop bootstrap; time limits keep the physical s1.
             bootstrap=(~tr['terminated'].bool()).float()
@@ -158,7 +170,9 @@ class MBDACFastSAC(MBDAC):
                 bootstrap,self.cfg.gamma)
         logits=self.critic(features,tr['a'])
         # Match Holosoma: mean over batch, then sum over Q ensemble.
-        loss=-(targets*torch.log_softmax(logits,dim=-1)).sum(-1).mean(dim=1).sum()
+        # CUDA autocast promotes source log_softmax to fp32. The adapted critic
+        # owns its autocast scope, so promote explicitly at this boundary too.
+        loss=-(targets*torch.log_softmax(logits.float(),dim=-1)).sum(-1).mean(dim=1).sum()
         self.opt_critic.zero_grad(set_to_none=True); loss.backward()
         norm=nn.utils.clip_grad_norm_(self.critic.parameters(),f['critic_grad_clip'] or float('inf'),error_if_nonfinite=True)
         self.opt_critic.step()
@@ -204,7 +218,8 @@ class MBDACFastSAC(MBDAC):
             objective=(discounts*before*(rewards+self.log_alpha.exp().detach()*torch.stack(entropies))).sum(0)
             alive=survival[-1]
         terminal_action,terminal_logp=self.actor.sample(hist,self.task.goal(cond))
-        value=self.critic.value(self._q_features(s,cond,ctx,previous,hist),terminal_action)
+        observed=start.get('critic_features') if self.cfg.horizon==0 else None
+        value=self.critic.value(self._q_features(s,cond,ctx,previous,hist,observed),terminal_action)
         bootstrap=self.cfg.gamma**self.cfg.horizon*alive*(value-self.log_alpha.exp().detach()*terminal_logp)
         objective=objective+bootstrap
         entropies.append(-terminal_logp)
@@ -231,7 +246,7 @@ class MBDACFastSAC(MBDAC):
                         real_start,rows=self._sample_replay_starts(self.cfg.fast_sac['real_actor_batch'],self.cfg.history)
                         real_history=self._history(rows)
                 action,logp=self.actor.sample(real_history,self.task.goal(real_start['condition']))
-                value=self.critic.value(self._q_features(real_start['s'],real_start['condition'],real_start['context'],real_start['a_prev'],real_history),action)
+                value=self.critic.value(self._q_features(real_start['s'],real_start['condition'],real_start['context'],real_start['a_prev'],real_history,real_start.get('critic_features')),action)
                 real_objective=(value-self.log_alpha.exp().detach()*logp).mean()
                 objective=weight*objective+(1-weight)*real_objective if weight else real_objective
                 logs.update(real_actor_loss=float(-real_objective.detach()),real_actor_entropy=float(-logp.detach().mean()))
@@ -246,12 +261,12 @@ class MBDACFastSAC(MBDAC):
         self.actor_updates+=1
         return {**logs,'actor_loss':float(loss.detach()),'actor_grad_norm':float(norm),'model_actor_weight':weight}
 
-    def update_actor_critic(self):
+    def update_actor_critic(self, enable_actor=True, critic_steps=None):
         """Common learner entry point, using real Q fits and model policy steps."""
         c=self.cfg;rows=[]
-        for _ in range(c.fast_sac['critic_updates']):
+        for _ in range(c.fast_sac['critic_updates'] if critic_steps is None else critic_steps):
             row=self.update_real_critic()
-            if (self.critic_updates>c.fast_sac['critic_warmup_updates'] and
+            if (enable_actor and self.critic_updates>c.fast_sac['critic_warmup_updates'] and
                     self.critic_updates%c.fast_sac['policy_frequency']==0):
                 row.update(self.update_actor())
             rows.append(row)
@@ -267,6 +282,14 @@ class MBDACFastSAC(MBDAC):
             for k,v in self.update_world_model().items(): logs[k]=logs.get(k,0.)+v/c.wm_batches
         if iteration>=c.wm_only_iters:
             logs.update(self.update_actor_critic())
+        elif c.fast_sac['pretrain_critic_during_wm_warmup']:
+            # Real C51 does not depend on differentiable model accuracy. Fit its
+            # configured warmup during the last WM-only updates, without enabling
+            # the actor early or adding extra Q steps beyond that warmup budget.
+            rounds=math.ceil(c.fast_sac['critic_warmup_updates']/c.fast_sac['critic_updates'])
+            if iteration>=max(0,c.wm_only_iters-rounds) and self.critic_updates<c.fast_sac['critic_warmup_updates']:
+                remaining=c.fast_sac['critic_warmup_updates']-self.critic_updates
+                logs.update(self.update_actor_critic(enable_actor=False,critic_steps=min(remaining,c.fast_sac['critic_updates'])))
         return {**logs,'optimizer/critic_updates':self.critic_updates,'optimizer/actor_updates':self.actor_updates,
                 'actor_learning_rate':self.opt_actor.param_groups[0]['lr']}
 

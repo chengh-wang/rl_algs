@@ -63,17 +63,25 @@ class ModelBasedRunner:
 
     @torch.no_grad()
     def _collect(self, n):
-        logs={}; count={}
+        logs={}; count={}; rows=[]
+        batched=self.cfg.get('batch_scalar_logging',True)
         for _ in range(n):
             obs=self.env.get_observations()
             action=self.alg.act(obs)
             obs,reward,dones,extras=self.env.step(action)
             self.alg.process_env_step(obs,reward,dones,extras)
             self.real_transitions+=self.env.num_envs
+            if batched:
+                from mbdac.utils.metrics import snapshot_metrics
+                rows.append(snapshot_metrics({'sim_reward':reward.detach().mean(),**extras.get('log',{})}))
+                continue
             logs['sim_reward']=logs.get('sim_reward',0.)+float(reward.mean())/n
             for k,v in extras.get('log',{}).items():
                 value=float(v.float().mean()) if isinstance(v,torch.Tensor) else float(v)
                 logs[k]=logs.get(k,0.)+value; count[k]=count.get(k,0)+1
+        if batched:
+            from mbdac.utils.metrics import mean_metrics
+            return mean_metrics(rows)
         for k,nc in count.items(): logs[k]/=nc
         return logs
 

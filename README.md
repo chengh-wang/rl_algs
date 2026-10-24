@@ -234,7 +234,38 @@ The completed 5000 run improves gait and backward tracking, with mixed forward
 quality; lateral/turning remain weak. Body and native torso-reward-frame errors
 are separate. See [final delivery and comparison](doc/final_report_2026-10-24.md).
 
+## Native velocity experiments (0.3.2)
+
+Use the existing MJLab environment; the baseline setup installs only the
+original Holosoma learner and its imported dependencies, without replacing
+Torch, CUDA or MJLab:
+
+```bash
+bash scripts/setup_native_velocity_baseline.sh
+.venv/bin/python -m examples.mjlab_velocity.train --robot go1 --method fastsac --num-envs 1024 --iterations 100000 --compile --log-dir logs/native_go1_fastsac_v2
+.venv/bin/python scripts/native_velocity_matrix.py
+```
+
+The matrix then runs WM+FastSAC, MBDAC, and a G1 transfer trial sequentially,
+with W&B logs and shared physical evaluations. It refuses to overwrite existing
+trials. Each primary method has a two-hour active-process budget and can stop
+earlier after stable acceptance. Evaluation reward/RMSE plots use actual elapsed
+time and real transitions; iteration counts are not equated across algorithms.
+
+Version 0.3.2 adds optional measured real-Q feature pairs, known previous-action
+critic features, opt-in BF16/fused FastSAC, optional real-Q pretraining during
+WM warmup, and batched scalar logging. Real contact measurements are preserved
+for real Q fitting; imagined Q still uses physical model heads. The native task
+factories and reward weights are not tuned for the algorithm. See the protocol
+and explicit approximation/recipe differences below before claiming a speedup.
+
 ## Design contract
+
+The new [native velocity benchmark](doc/native_velocity_benchmark.md) compares
+MBDAC, upstream Holosoma FastSAC and WM+FastSAC on identical native MJLab Go1
+velocity tasks, with G1 as a second task. It records physical evaluation reward,
+separate XY/yaw RMSE, survival, real transitions and actual elapsed time. All
+networks start from scratch; results are experimental until the report is filled.
 
 - Core learning code imports neither MJLab nor Isaac Lab.
 - Dynamics learn from real simulator transitions; actor/critic learn from short imagined trajectories.

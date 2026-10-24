@@ -27,7 +27,7 @@ class DifferentiableNormalization(EmpiricalNormalization):
 class HolosomaActor(nn.Module):
     def __init__(self, obs_dim, goal_dim, action_dim, history, options):
         super().__init__()
-        self.history=history; self.precision='fp32'
+        self.history=history; self.precision=options.get('precision','fp32')
         self.obs_norm=DifferentiableNormalization(obs_dim)
         self.goal_norm=DifferentiableNormalization(goal_dim)
         dim=obs_dim*history+goal_dim
@@ -49,27 +49,33 @@ class HolosomaActor(nn.Module):
         return torch.cat((normalized.flatten(-2),self.goal_norm(goal)),-1)
 
     def forward(self, history, goal):
-        return self.net(self.inputs(history,goal))[0]
+        with torch.autocast('cuda',dtype=torch.bfloat16,enabled=history.is_cuda and self.precision=='bf16'):
+            return self.net(self.inputs(history,goal))[0]
 
     def sample(self, history, goal):
-        return self.net.get_actions_and_log_probs(self.inputs(history,goal))
+        with torch.autocast('cuda',dtype=torch.bfloat16,enabled=history.is_cuda and self.precision=='bf16'):
+            return self.net.get_actions_and_log_probs(self.inputs(history,goal))
 
 
 class HolosomaCritic(nn.Module):
     def __init__(self, dim, action_dim, options):
         super().__init__()
+        self.precision=options.get('precision','fp32')
         self.norm=DifferentiableNormalization(dim)
         self.net=Critic({'critic':dict(start=0,end=dim,size=dim)},['critic'],action_dim,
                         options['num_atoms'],options['v_min'],options['v_max'],
                         options['critic_hidden_dim'],device='cpu',num_q_networks=options['num_q_networks'])
 
     def forward(self, features, actions):
-        return self.net(self.norm(features),actions)
+        with torch.autocast('cuda',dtype=torch.bfloat16,enabled=features.is_cuda and self.precision=='bf16'):
+            return self.net(self.norm(features),actions)
 
     def value(self, features, actions):
-        probabilities=torch.softmax(self(features,actions),dim=-1)
-        return self.net.get_value(probabilities).mean(dim=0)
+        with torch.autocast('cuda',dtype=torch.bfloat16,enabled=features.is_cuda and self.precision=='bf16'):
+            probabilities=torch.softmax(self(features,actions),dim=-1)
+            return self.net.get_value(probabilities).mean(dim=0)
 
     def projection(self, features, actions, rewards, bootstrap, discount):
         discount=torch.as_tensor(discount,device=rewards.device,dtype=rewards.dtype).expand_as(rewards)
-        return self.net.projection(self.norm(features),actions,rewards,bootstrap,discount)
+        with torch.autocast('cuda',dtype=torch.bfloat16,enabled=features.is_cuda and self.precision=='bf16'):
+            return self.net.projection(self.norm(features),actions,rewards,bootstrap,discount)
