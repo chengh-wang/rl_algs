@@ -9,7 +9,7 @@ description = "Simulator-independent model-based differentiable actor-critic for
 requires-python = ">=3.10"
 license = "MIT"
 license-files = ["LICENSE", "licenses/*"]
-dependencies = ["torch>=2.6", "numpy>=1.24", "tensordict>=0.7"]
+dependencies = ["torch>=2.6", "numpy>=1.24", "tensordict>=0.7", "tensorboard>=2.14"]
 
 [project.optional-dependencies]
 mjlab = ["mjlab==1.2.0", "mujoco==3.8.1", "mujoco-warp==3.8.1", "warp-lang==1.12.0", "scipy==1.17.0"]

@@ -27,4 +27,15 @@ def world_model_diagnostics(world_model,task,replay,window=8,batch=128):
             valid=mask[:,index].sum()
             result[f'model/{label}_samples']=int(valid)
             if valid>0: result[f'model/{label}_{name}_rmse']=float(masked_rmse(error[:,index,indices],mask[:,index]))
+    if getattr(task,'primitive_specs',()) and mask.any():
+        context=task.normalize_context(w['context'])
+        previous=torch.cat((w['s'][:,:1],predicted[:,:-1]),1)
+        oracle=world_model.primitives(w['s1'],context)
+        oracle.update(world_model.transition_primitives(w['s'],w['a'],w['s1'],context))
+        rollout=world_model.primitives(predicted,context)
+        rollout.update(world_model.transition_primitives(previous,w['a'],predicted,context))
+        for spec in task.primitive_specs:
+            target=w['primitive/'+spec.name]
+            for name,values in [('head_oracle',oracle),('head_rollout',rollout)]:
+                result[f'model/{name}/{spec.name}_rmse']=float(masked_rmse(values[spec.name]-target,mask))
     return result

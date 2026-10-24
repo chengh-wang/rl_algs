@@ -10,3 +10,4 @@ wandb/
 *.console.log
 build/
 dist/
+external/

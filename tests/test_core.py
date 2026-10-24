@@ -163,9 +163,20 @@ def test_physical_diagnostics_mask_resets_for_a_known_model():
     env=ToyEnv(); alg=MBDAC(env.model_task,4,config()); fill(alg,env)
     class ExactModel:
         def __call__(self,s,a,ctx): return s+torch.cat((a,.5*a),-1)*.1
+        def primitives(self,s,ctx): return {'position':s[...,:1]}
+        def transition_primitives(self,s,a,s1,ctx): return {'force':a}
     result=world_model_diagnostics(ExactModel(),env.model_task,alg.replay,window=3,batch=128)
     assert result['model/step_3_samples']>0
     assert result['model/one_step_state_rmse']==0 and result['model/step_3_state_rmse']<1e-6
+    replay=ReplayBuffer(8,4,'cpu')
+    for _ in range(6):
+        _,_,_,extra=env.step(torch.ones(4,1)*.1); tr=extra['model_transition']
+        replay.add({**tr,'primitive/position':tr['s1'][...,:1],'primitive/force':tr['a']})
+    task=copy.deepcopy(env.model_task)
+    task.primitive_specs=(PrimitiveSpec('position',1,'m','world'),PrimitiveSpec('force',1,'N','world',transition=True))
+    result=world_model_diagnostics(ExactModel(),task,replay,window=3,batch=128)
+    for kind in ('head_oracle','head_rollout'):
+        for quantity in ('position','force'): assert result[f'model/{kind}/{quantity}_rmse']<1e-6
 
 
 def test_optimizer_schedule_matches_reference_warmup_and_10_1_20_ratio():
@@ -219,3 +230,13 @@ def test_exogenous_boundary_masks_world_model_windows():
     assert window['model_boundary'].any()
     for i in range(1,4):
         assert not torch.any((window['mask'][:,i]>0)&window['model_boundary'][:,:i].any(1))
+
+
+def test_random_episode_length_initialization_is_owned_by_adapter():
+    from dataclasses import asdict
+    class RandomizedEnv(ToyEnv):
+        randomized=False
+        def randomize_episode_lengths(self): self.randomized=True
+    env=RandomizedEnv(); runner=ModelBasedRunner(env,{'algorithm':{'class_name':'MBDAC',**asdict(config())},'log_interval':1})
+    runner.learn(1,init_at_random_ep_len=True)
+    assert env.randomized

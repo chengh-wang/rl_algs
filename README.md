@@ -2,7 +2,7 @@
 
 Independent PyTorch package for **MBDAC** (model-based differentiable actor-critic) and **MBDACAMP** (the same learner with an AMP motion prior). The public runner follows RSL-RL conventions. Simulator gradients are not required.
 
-Implementation is in progress. The first acceptance task is original G1 motion tracking in native MJLab manager-based environments. Native 1024-environment sampling and full-network actor/critic updates have passed; training success and Isaac Lab runtime compatibility are still being evaluated.
+Implementation is in progress. The current training and acceptance work uses **MJLab**, with native `ManagerBasedRlEnv` physics and managers. G1 tracking runs in 1024 parallel environments; full-network updates, physical evaluation, checkpoint resume and export have passed. Policy quality is still being evaluated. Other simulator backends are outside the current training scope.
 
 ## Fresh installation (Linux, NVIDIA GPU)
 
@@ -40,7 +40,7 @@ The first 500 iterations fit the world model. Later iterations continue fitting 
 # Continue a checkpoint; replay is refilled before updates when omitted.
 .venv/bin/python -m examples.mjlab_g1.train --num-envs 1024 \
   --resume logs/g1_mbdac_1024/model_2000.pt \
-  --iterations 2000 --log-dir logs/g1_mbdac_1024_continued
+  --iterations 2000 --compile --log-dir logs/g1_mbdac_1024_continued
 
 # Actual physics evaluation, without automatic reset; reference left, policy right.
 .venv/bin/python -m examples.mjlab_g1.evaluate \
@@ -77,7 +77,7 @@ The example preserves the reference's full network widths, 10-frame observation 
 
 See the [update schedule audit](doc/update_schedule_audit.md) for the exact 10 WM / 1 actor / 20 critic optimizer steps per iteration, UTD definition, and the reference repository's additional 500-iteration warmup.
 
-The observed velocity baseline used a different task, AMP+PPO and hardware load. Timing a few tracking updates does not establish an advantage over that baseline. A matched velocity-task comparison is a later acceptance item.
+The observed velocity baseline used a different task, AMP+PPO and hardware load. Timing a few tracking updates does not establish an advantage over that baseline. The [matched velocity benchmark](doc/velocity_benchmark.md) reuses the retained baseline's native MJLab task and expert loader; native learning quality and speed comparisons remain acceptance items. See [current measured progress](doc/progress_2026-10-24.md).
 
 ## Design contract
 

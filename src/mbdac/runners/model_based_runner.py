@@ -78,7 +78,10 @@ class ModelBasedRunner:
 
     def learn(self, num_learning_iterations, init_at_random_ep_len=False):
         if init_at_random_ep_len:
-            raise ValueError('Reference reset sampling owns episode phases; randomize through the task adapter')
+            randomize=getattr(self.env,'randomize_episode_lengths',None)
+            if randomize is None:
+                raise ValueError('This task owns episode phases; its adapter must explicitly support random episode lengths')
+            randomize()
         self.alg.train_mode(); self._active_start=time.perf_counter(); c=self.alg.cfg
         aggregated=[]
         try:

@@ -70,4 +70,6 @@ Reward labels are useful diagnostics but are not reward-head supervision. Replay
 
 `MjlabModelAdapter` wraps native `ManagerBasedRlEnv` five-return stepping into the RSL-style four-return interface. The G1 example subclasses the native environment only to capture raw `qpos/qvel` before reset. MJLab still owns physics substeps, action/reward/observation/termination managers, parallel world allocation, and resets.
 
-`IsaacLabModelAdapter` is a framework-independent bridge around an Isaac Lab RSL wrapper. It requires the task to capture the same pre-reset transition schema. This bridge has not yet been validated in a live Isaac Lab runtime.
+The core also exposes a generic `RslModelAdapter` protocol bridge. Other simulator backends are deferred from the current MJLab training and acceptance scope; a bridge alone does not supply the task's physical functions or terminal-state capture.
+
+`world_model_diagnostics` reports state prediction errors in physical units. For declared primitive heads it separately measures error on real input states/transitions (`head_oracle`) and error through the multi-step predicted rollout (`head_rollout`). Head RMSE uses each spec's physical units, or probability units for binary contact, and excludes samples after reset or an exogenous replay boundary.
