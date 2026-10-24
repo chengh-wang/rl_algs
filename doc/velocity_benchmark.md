@@ -73,6 +73,14 @@ The AMP extension uses the baseline fork's expert loader, body order, feature de
 
 The evaluator uses nominal standing initialization, five fixed commands (forward, backward, lateral, turning and standing), no observation noise or perturbations, and no automatic reset. Native failure conditions are measured externally. Steady velocity and gait metrics exclude the first two seconds and all post-failure samples. `--model-diagnostics` additionally evaluates dynamics and each physical primitive head on newly collected real transitions; head errors are reported both with true states and with predicted rollout states.
 
+The original `velocity`/RMSE fields measure pelvis velocity in its body frame.
+Additional `anchor_velocity`/`anchor_*` fields measure torso XY velocity in its
+yaw-only frame and torso angular velocity along world Z, matching the native
+reward's commanded quantities. Both sets are reported separately. Earlier
+prototype root/body metrics are retained with their original meaning. Reevaluate
+the retained PPO checkpoint with the current evaluator when comparing the added
+anchor fields; changing frames silently would invalidate the comparison.
+
 Expert loading keeps the original generator alive across discriminator updates. The upstream loader chooses clips from its internal batch index; repeatedly creating a generator and taking its first batch would train on only the first clip. The adapter preserves the baseline's 20-batch cycle, covering all 18 clips and then repeating clips 0 and 1, before starting the next cycle.
 
 MBDACAMP keeps the first 500 iterations strictly WM-only. Afterwards each outer iteration fits WM ten times, updates the discriminator once on real/expert data, updates the actor once through the frozen model/prior, and fits the critic twenty times. This avoids pretraining a discriminator against an actor that cannot yet change. The AMP extension is our design; SuperMimic does not prescribe an AMP schedule. Discriminator learning rate follows the learner schedule unless explicitly overridden in `amp.lr`.

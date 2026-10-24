@@ -11,6 +11,7 @@ import torch
 from tensordict import TensorDict
 from mjlab.envs.mdp import reset_scene_to_default
 from mjlab.managers.event_manager import EventTermCfg
+from mjlab.utils.lab_api.math import quat_apply_inverse,yaw_quat
 from mbdac.modules.networks import Actor
 from mbdac.runners.model_based_runner import InferencePolicy
 from mbdac.utils.provenance import runtime_provenance
@@ -95,8 +96,9 @@ def main():
         obs=env.observation_manager.compute(update_history=True)
     env.obs_buf=obs; robot=env.scene['robot']
     steps=round(args.seconds/env.step_dt); first_failure=np.full(5,steps+1,dtype=int); causes=[None]*5
-    traces={key:[] for key in ['velocity','position','joint_pos','joint_vel','action','contact','foot_velocity','foot_position','qpos','qvel','actual_command']}
+    traces={key:[] for key in ['velocity','anchor_velocity','position','joint_pos','joint_vel','action','contact','foot_velocity','foot_position','qpos','qvel','actual_command']}
     feet=[robot.site_names.index(name) for name in ('left_foot','right_foot')]
+    anchor=robot.body_names.index('torso_link')
     writer=None
     if args.video:
         import imageio.v2 as imageio
@@ -121,7 +123,9 @@ def main():
                 for index in np.flatnonzero(mask.cpu().numpy()&(first_failure>step)): causes[index]=name
             for index in np.flatnonzero(bad.cpu().numpy()&(first_failure>step)):
                 first_failure[index]=step; causes[index]=causes[index] or 'non_finite_physics'
+            anchor_velocity=quat_apply_inverse(yaw_quat(robot.data.body_link_quat_w[:,anchor]),robot.data.body_link_lin_vel_w[:,anchor])
             values=dict(velocity=torch.cat((robot.data.root_link_lin_vel_b[:,:2],robot.data.root_link_ang_vel_b[:,2:3]),-1),
+                anchor_velocity=torch.cat((anchor_velocity[:,:2],robot.data.body_link_ang_vel_w[:,anchor,2:3]),-1),
                 position=robot.data.root_link_pos_w,joint_pos=robot.data.joint_pos,joint_vel=robot.data.joint_vel,
                 action=action,contact=(env.scene['feet_ground_contact'].data.found>0).reshape(5,-1),
                 foot_velocity=robot.data.site_lin_vel_w[:,feet,:2],foot_position=robot.data.site_pos_w[:,feet]-env.scene.env_origins[:,None],
@@ -153,9 +157,13 @@ def main():
                  failure_cause=causes[index],steady_seconds=float(steady.sum()*env.step_dt))
         if steady.any():
             velocity=arrays['velocity'][steady,index]; error=velocity-commands[index]
+            anchor_velocity=arrays['anchor_velocity'][steady,index]; anchor_error=anchor_velocity-commands[index]
             contact=arrays['contact'][steady,index]; foot_v=arrays['foot_velocity'][steady,index]
             row.update(mean_velocity=velocity.mean(0).tolist(),rmse_per_axis=np.sqrt(np.mean(error**2,axis=0)).tolist(),
                 horizontal_velocity_rmse=float(np.sqrt(np.mean(np.sum(error[:,:2]**2,axis=1)))),
+                anchor_mean_velocity=anchor_velocity.mean(0).tolist(),
+                anchor_rmse_per_axis=np.sqrt(np.mean(anchor_error**2,axis=0)).tolist(),
+                anchor_horizontal_velocity_rmse=float(np.sqrt(np.mean(np.sum(anchor_error[:,:2]**2,axis=1)))),
                 foot_slip_rms_m_s=float(np.sqrt((np.sum(foot_v**2,axis=-1)*contact).sum()/contact.sum())) if contact.any() else None,
                 both_feet_contact_fraction=float(contact.all(1).mean()),contact_fraction_per_foot=contact.mean(0).tolist(),
                 foot_height_range_m=np.ptp(arrays['foot_position'][steady,index,:,2],axis=0).tolist(),
@@ -167,6 +175,7 @@ def main():
         checkpoint_sha256=hashlib.sha256(args.checkpoint.read_bytes()).hexdigest(),
         training_elapsed_s=checkpoint.get('elapsed_s'),real_transitions=checkpoint.get('real_transitions'),
         task='Unitree-G1-AMP-Flat',seed=args.seed,requested_horizon_s=args.seconds,physics_dt=.005,control_dt=env.step_dt,
+        velocity_measurement='root_link_body',anchor_velocity_measurement='torso_yaw_xy_world_angular_z',
         initialization='standing',native_physics=True,auto_reset=False,domain_randomization=False,
         observation_noise=False,steady_start_s=2.,cases=cases,world_model=diagnostics,runtime=runtime_provenance())
     (args.output/'evaluation.json').write_text(json.dumps(result,indent=2)+'\n')

@@ -16,6 +16,11 @@ def main():
             raise ValueError(f'Evaluation protocol differs for {key}')
     if not baseline.get('native_physics') or baseline.get('auto_reset'):
         raise ValueError('Comparison requires native physics without automatic reset')
+    if baseline.get('velocity_measurement','root_link_body')!=candidate.get('velocity_measurement','root_link_body'):
+        raise ValueError('Velocity measurement frames differ')
+    anchor_frame=baseline.get('anchor_velocity_measurement')
+    if anchor_frame and candidate.get('anchor_velocity_measurement')!=anchor_frame:
+        raise ValueError('Anchor velocity measurement frames differ')
     old={r['name']:r for r in baseline['cases']}; new={r['name']:r for r in candidate['cases']}
     if old.keys()!=new.keys(): raise ValueError('Evaluated command cases differ')
     rows=[]
@@ -26,6 +31,8 @@ def main():
             row[label+'_survived']=item['survived_horizon']
             row[label+'_horizontal_rmse_m_s']=item.get('horizontal_velocity_rmse')
             row[label+'_yaw_rmse_rad_s']=item.get('rmse_per_axis',[None,None,None])[2]
+            row[label+'_anchor_horizontal_rmse_m_s']=item.get('anchor_horizontal_velocity_rmse')
+            row[label+'_anchor_yaw_rmse_rad_s']=item.get('anchor_rmse_per_axis',[None,None,None])[2]
             row[label+'_first_failure_s']=item.get('first_failure_s')
             for metric in ('foot_slip_rms_m_s','joint_acceleration_rms_rad_s2','liftoffs_per_foot'):
                 row[label+'_'+metric]=item.get(metric)
@@ -52,6 +59,8 @@ def main():
         baseline_iteration=baseline['iteration'],candidate_iteration=candidate['iteration'],
         baseline_prior_backend=baseline.get('prior_backend'),candidate_prior_backend=candidate.get('prior_backend'),
         task=baseline['task'],same_evaluation_protocol=True,timing=timing,cases=rows,
+        velocity_measurement=baseline.get('velocity_measurement','root_link_body'),
+        anchor_velocity_measurement=anchor_frame,
         caveats=['Report different training environment/batch counts and policy architectures.',
                  'Two checkpoints alone do not establish time to matched quality.',
                  'Missing RMSE means insufficient pre-failure steady data, not zero error.',
@@ -64,6 +73,12 @@ def main():
         '| --- | --- | --- | ---: | ---: | ---: | ---: |']
     for row in rows:
         lines.append(f'| {row["name"]} | {row["baseline_survived"]} | {row["candidate_survived"]} | {number(row["baseline_horizontal_rmse_m_s"])} | {number(row["candidate_horizontal_rmse_m_s"])} | {number(row["baseline_yaw_rmse_rad_s"])} | {number(row["candidate_yaw_rmse_rad_s"])} |')
+    if anchor_frame:
+        lines+=['','The table above measures pelvis/body velocity. Native reward target frame:',
+            '', '| Command | PPO torso-yaw XY RMSE (m/s) | Candidate torso-yaw XY RMSE (m/s) | PPO world-z yaw RMSE (rad/s) | Candidate world-z yaw RMSE (rad/s) |',
+            '| --- | ---: | ---: | ---: | ---: |']
+        for row in rows:
+            lines.append(f'| {row["name"]} | {number(row["baseline_anchor_horizontal_rmse_m_s"])} | {number(row["candidate_anchor_horizontal_rmse_m_s"])} | {number(row["baseline_anchor_yaw_rmse_rad_s"])} | {number(row["candidate_anchor_yaw_rmse_rad_s"])} |')
     lines+=['','Training cost:',*['- '+k+': '+str(v) for k,v in timing.items()],
             '',*['- '+note for note in result['caveats']]]
     (args.output/'comparison.md').write_text('\n'.join(lines)+'\n'); print(json.dumps(result,indent=2))
