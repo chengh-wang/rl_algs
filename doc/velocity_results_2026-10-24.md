@@ -55,6 +55,17 @@ The evaluator initially missed assigning its diagnostic task to the physical cap
 
 Independent discriminator optimizer details also differ from the fork's PPO implementation: MBDACAMP follows the model-based learner's 2e-4 schedule and does not apply the fork's separate 0.001 trunk / 0.1 head weight decays. Both use LS-GAN and gradient penalty 10, expert features, width 1024/512/256 and the same task/style mixture. This is an algorithm comparison, not a claim that all optimizer settings are identical.
 
+Additional code-level differences are explicit. The independent prior uses ELU
+and unbounded normalized inputs; the retained fork uses ReLU and clips normalized
+features to ±10. Our gradient penalty is evaluated on normalized expert features;
+the retained fork calls `compute_grad_pen(*sample_amp_expert)` on its raw expert
+tuple, although its classification inputs are normalized separately. Our prior
+has its own clipped optimizer step; the fork's joint optimizer clips policy
+gradients but not discriminator gradients. These choices are part of the current
+MBDACAMP extension. The comparison holds task, expert files and evaluation
+conditions fixed, but does not isolate the causal effect of model-based actor
+updates alone.
+
 Evidence: `logs/velocity_comparison_2000/comparison.json`, `logs/velocity_progress_2000.png`, `logs/velocity_eval_mbdacamp_{1000,1500,2000}/evaluation.json`, `logs/velocity_eval_mbdacamp_2000/forward.mp4` and `prior_audit.json`.
 
 ### Command-path diagnostic during continuation
