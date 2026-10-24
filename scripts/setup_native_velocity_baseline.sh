@@ -5,6 +5,9 @@ benchmark_python="${MBDAC_PYTHON:-.venv/bin/python}"
 benchmark_source="data/external/holosoma"
 if [ ! -d "$benchmark_source/.git" ]; then
   git clone --filter=blob:none --no-checkout https://github.com/amazon-far/holosoma.git "$benchmark_source"
+elif [ -n "$(git -C "$benchmark_source" status --porcelain)" ]; then
+  printf '%s\n' 'The baseline requires a clean Holosoma checkout; preserve local changes before running setup.' >&2
+  exit 1
 fi
 git -C "$benchmark_source" checkout d18d6cc50f872c15e904a22ceac22313cec955c8
 uv pip install --python "$benchmark_python" --no-deps -e "$benchmark_source/src/holosoma"
