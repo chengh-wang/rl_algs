@@ -1,0 +1,91 @@
+{
+  "generated_utc": "2026-10-25T01:00:36.441016+00:00",
+  "source_data": "logs/native_go1_refined_checkpoints/checkpoint_evaluations.jsonl",
+  "source_data_sha256": "9235ad4a94dffe0bacb5b24bea8460ad567d4932d5fe485fbe94fa92a37593b3",
+  "plotting_source": "scripts/refine_native_velocity.py",
+  "plotting_source_sha256": "c3370e9a51220f7eb78b7794e81e610df3d5b6052afb557cf756072c75e5d486",
+  "plotting_entry_point": "scripts.refine_native_velocity.plot",
+  "record_count": 42,
+  "new_offline_physical_evaluations": 38,
+  "existing_online_initialization_failure_references": 4,
+  "native_task_sha256": [
+    "3d05202c49c7da8f065daa42fcddbbe52720035ea4dd273bc4c880e5aa4991f6"
+  ],
+  "training_seed": 42,
+  "training_parallel_environments": 1024,
+  "evaluation": {
+    "seconds": 20,
+    "steady_rmse_excludes_initial_seconds": 2,
+    "commands": [
+      [
+        0,
+        0,
+        0
+      ],
+      [
+        0.8,
+        0,
+        0
+      ],
+      [
+        -0.5,
+        0,
+        0
+      ],
+      [
+        0,
+        0.5,
+        0
+      ],
+      [
+        0,
+        0,
+        0.5
+      ]
+    ],
+    "replicas_per_command": 8,
+    "total_nominal_worlds": 40,
+    "replica_interpretation": "Deterministic nominal repeatability copies, not40 independent randomized starts.",
+    "survival": "All40 complete20 seconds for a full-survival result; post-failure physical samples remain in RMSE.",
+    "accepted_thresholds": {
+      "xy_rmse_m_s": 0.2,
+      "yaw_rmse_rad_s": 0.3
+    }
+  },
+  "time_axis": {
+    "field": "iteration_logged_process_s",
+    "definition": "Retrospective TensorBoard logged iteration wall timestamp minus original process start; includes preceding online-evaluation time. NOT the original online result availability time and NOT a new prospective time-to-threshold measurement.",
+    "source_tag": "Loss/qf_loss for original FastSAC; iteration for model-based runs.",
+    "initialization_rows": "No retrospective logged timestamp exists at iteration0; CSV field blank and these four points omitted on time-axis plots. They remain at measured0 real transitions on sample-axis plots."
+  },
+  "resolution_and_interpretation": {
+    "checkpoint_resolution": "250 saved learner iterations/loop indices; iteration work differs across algorithms. CSV retains exact recorded real simulator transition counters.",
+    "transition_axis": "Actual saved-checkpoint counts on shared axes; not a fabricated exactly matched sample grid.",
+    "thresholds": "First sampled strict pass; no interpolation, monotonicity assumption, confidence interval or multi-seed superiority claim.",
+    "line_segments": "Visual connections between measured checkpoint samples only; never used to infer an exact crossing.",
+    "scope": "One-seed laptop experiment comparing complete method recipes. Integration/normalization/compilation differences prevent isolating all effects to the world model."
+  },
+  "display_labels": {
+    "mbdac": "MBDAC",
+    "fastsac": "FastSAC",
+    "wm_fastsac_hybrid": "WM + FastSAC",
+    "wm_fastsac_real_only": "Same integration, real SAC only"
+  },
+  "csv_field_mapping": {
+    "seed": "training_seed in source JSONL",
+    "return": "mean_return in source JSONL",
+    "pass": "aggregate XY/yaw thresholds plus full survival",
+    "all_command_pass": "Each command individually meets both thresholds plus full survival"
+  },
+  "outputs": {
+    "native_velocity_checkpoint_time.png": {
+      "sha256": "3f801d05e79ec75a2bbc20392585e46e5a8ac2afb940f66f373d8dd5a8367cba"
+    },
+    "native_velocity_real_transitions.png": {
+      "sha256": "c8e9fb3fe32fee690d76739d4caa044e7ceaed8c85661f127fd99aa8d0e88a21"
+    },
+    "native_velocity_evaluations.csv": {
+      "sha256": "7ed30bbcf1df7abff8a4f10bc23b0cff6d764902c573f0768c12302721324540"
+    }
+  }
+}
