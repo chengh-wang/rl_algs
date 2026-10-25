@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "mbdac"
-version = "0.3.3"
-description = "Simulator-independent model-based differentiable actor-critic for robotics"
+version = "0.4.0"
+description = "Simulator-independent model-based and model-free reinforcement learning for robotics"
 requires-python = ">=3.10"
-license = "MIT AND Apache-2.0"
+license = "MIT AND Apache-2.0 AND BSD-3-Clause AND LicenseRef-SMP-No-License"
 license-files = ["LICENSE", "licenses/*"]
 dependencies = ["torch>=2.6", "numpy>=1.24", "tensordict>=0.7", "tensorboard>=2.14"]
 
@@ -21,6 +21,8 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 "mbdac.vendor.holosoma" = ["source.json"]
+"mbdac.smp.vendor" = ["PROVENANCE.md"]
+"mbdac.smp" = ["PROVENANCE.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

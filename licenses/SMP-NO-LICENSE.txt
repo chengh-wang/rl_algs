@@ -1,0 +1,10 @@
+LicenseRef-SMP-No-License
+
+Source: https://github.com/SUZ-tsinghua/smp
+Commit: 28d1dfd1b7b4447977fbdb2062167d9f87a2faaa
+
+The upstream snapshot has no LICENSE file. This identifier records that no
+license grant is provided for the retained upstream SMP code, including
+src/mbdac/smp/vendor/model.py and scheduler.py. It does not grant rights or
+relicense that source under this project's MIT, Apache-2.0 or BSD-3-Clause terms.
+See src/mbdac/smp/PROVENANCE.md for exact reuse and derivation details.

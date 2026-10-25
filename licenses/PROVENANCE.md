@@ -1,5 +1,17 @@
 # Provenance
 
+- `FlashSAC` / `SMPFlashSAC` use a separately pinned FlashSAC numerical subset at
+  `87edc9061150ae9e962dd84e6544e27a1554b3ab` (Holiday Robotics, MIT), with
+  simulator-free replay shape descriptors and a local tensor runner. This is
+  distinct from Holosoma FastSAC. See `FlashSAC_PROVENANCE.md` for retained notices
+  and exact source/module transformations.
+- SMP uses `SUZ-tsinghua/smp` at `28d1dfd1b7b4447977fbdb2062167d9f87a2faaa`.
+  Its snapshot has no LICENSE file; no MIT/Apache grant is asserted for that
+  code. See `SMP-NO-LICENSE.txt` and `src/mbdac/smp/PROVENANCE.md`.
+  Selected quaternion formulas retain Isaac Lab BSD-3-Clause attribution and
+  the MJLab Apache distribution notice. Algorithms contain no simulator imports;
+  robot/schema defaults and native MJLab adapters remain in the task checkout.
+
 - `MBDACFastSAC` reuses Holosoma revision `d18d6cc50f872c15e904a22ceac22313cec955c8` (Amazon, Apache-2.0). `src/mbdac/vendor/holosoma/fast_sac.py` is unchanged upstream numerical code; `normalization.py` contains its verbatim `EmpiricalNormalization` class with only standalone imports supplied. See `source.json`, `holosoma-Apache-2.0.txt` and `holosoma-NOTICE.txt`. Local adapters preserve its statistical update and provide differentiable normalization without updating statistics on imagination. History/goal inputs, native task adapter, real-only Q anchoring and short model-based actor objective are our extensions. This is not the separate FlashSAC implementation and is not an unchanged Holosoma training loop.
 
 - Algorithm reference: SuperMimic, arXiv:2610.28480, sections 3 and appendices A-G. Independent implementation; no claim of an official release.
