@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import uuid
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -177,7 +178,7 @@ def publish(args, evidence):
     os.environ["WANDB_BASE_URL"] = BASE_URL
     import wandb
     if not cache:
-        identity = wandb.util.generate_id()
+        identity = uuid.uuid4().hex[:8]
         cache = dict(id=identity, entity=ENTITY, project=PROJECT, base_url=BASE_URL,
                      url=f"https://forge.coreweave.com/wandb/{ENTITY}/{PROJECT}/runs/{identity}")
     cache.update(status="publishing", manifest_sha256=evidence["manifest_sha256"])
