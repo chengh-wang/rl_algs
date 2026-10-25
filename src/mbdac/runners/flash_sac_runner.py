@@ -2,11 +2,14 @@
 
 SMP rewards are explicitly either already composed by the environment, or supplied
 by a task-owned stateful reward provider. This runner never infers physics or
-motion features. Checkpoints contain learner/persistent SMP state, not simulator
+motion features. Potential-based shaping requires a fixed reward denominator:
+changing the denominator over time destroys its telescoping identity.
+Checkpoints contain learner/persistent SMP state, not simulator
 state or live policy/SMP episode histories; load starts fresh collection.
 """
 from __future__ import annotations
 import copy
+from collections.abc import Mapping
 from dataclasses import fields
 from pathlib import Path
 import os
@@ -128,6 +131,38 @@ class FlashSACRunner:
                 raise ValueError('SMP requires explicit environment or reward_provider reward_source')
             self.contract.update(smp_reward_source=self.smp_source, actor_delay_updates=self.actor_delay_updates)
             from mbdac.flashsac.learner import SMPFlashSACRunner as Learner
+        # Generic composition is opt-in and separate from the legacy SMP path.
+        # Absent mode leaves historical public checkpoint contracts unchanged.
+        self.generic_reward_provider = None
+        reward_cfg = self.cfg.get('reward')
+        if reward_cfg is not None:
+            if not isinstance(reward_cfg, dict) or reward_cfg.get('source') != 'provider':
+                raise ValueError("Generic reward requires reward={'source':'provider'}")
+            if set(reward_cfg) != {'source'}:
+                raise ValueError('Provider settings belong to its explicit contract, not runner reward config')
+            if self.is_smp:
+                raise ValueError('Generic reward provider cannot be combined with SMP reward composition')
+            provider = getattr(env, 'reward_provider', None)
+            if not callable(provider) or not all(callable(getattr(provider,k,None))
+                    for k in ('state_dict','load_state_dict','reset')):
+                raise ValueError('Generic reward_provider must be callable, checkpointable and expose reset()')
+            contract = getattr(provider,'contract',None)
+            if not isinstance(contract,dict):
+                raise ValueError('Generic reward_provider requires a portable contract dict')
+            if (contract.get('kind') == 'potential_based_shaping'
+                    and self.learner_cfg.reward_normalization != 'fixed'):
+                raise ValueError("potential_based_shaping requires reward_normalization='fixed'; "
+                                 "a changing denominator destroys telescoping")
+            discount = contract.get('algorithm_discount')
+            if (isinstance(discount,bool) or not isinstance(discount,(int,float))
+                    or not np.isfinite(discount) or discount != self.learner_cfg.gamma):
+                raise ValueError('Reward provider algorithm_discount must match learner gamma')
+            if contract.get('next_potential_semantics') != 'pre_reset':
+                raise ValueError('Reward provider must declare pre_reset next potential semantics')
+            if contract.get('normalization_base') != 'task_reward':
+                raise ValueError('Reward provider must declare task_reward normalization base')
+            self.generic_reward_provider = provider
+            self.contract['reward_provider'] = copy.deepcopy(contract)
         args = (self._obs['actor'].shape[-1], self._obs['critic'].shape[-1], env.num_actions,
                 env.num_envs, self.learner_cfg, self.contract)
         self.alg = Learner(*args, **({'actor_delay_updates':self.actor_delay_updates} if self.is_smp else {}))
@@ -153,10 +188,19 @@ class FlashSACRunner:
                 action = self.alg.actions(self._obs['actor'])
                 obs, rewards, dones, extras = self.env.step(action)
                 after = observation_groups(obs, self.groups, self.env.num_envs, self.device)
+                task_reward = None
+                if self.generic_reward_provider is not None:
+                    task_reward = torch.as_tensor(rewards,device=self.device).detach().clone()
+                    payload = extras.get('reward_potential')
+                    if not isinstance(payload,Mapping) or not {'current','next','version'} <= payload.keys():
+                        raise ValueError('Reward provider requires current and pre-reset next reward_potential endpoints')
+                    rewards = self.generic_reward_provider(rewards,extras)
                 if self.reward_provider is not None:
                     # Provider owns valid-history masking and returns composed rewards.
                     rewards = self.reward_provider(rewards, extras)
                 transition = real_transition(self._obs, after, action, rewards, dones, extras, self.groups, self.device)
+                if self.generic_reward_provider is not None:
+                    transition['task_reward'] = task_reward
                 self.alg.observe(transition)
                 self._obs = after
                 collected = time.perf_counter()
@@ -172,6 +216,10 @@ class FlashSACRunner:
                         sim_reward=float(transition['reward'].mean()), wall_s=self._elapsed(),
                         **{'time/collect_wall_s':collected-started,
                            'time/update_wall_s':time.perf_counter()-collected})
+                    if self.generic_reward_provider is not None:
+                        logs.update(task_reward=float(task_reward.mean()),
+                                    learner_reward=float(transition['reward'].mean()),
+                                    sim_reward=float(task_reward.mean()))
                     self._log(logs)
                 if self.log_dir and self.current_learning_iteration % self.save_interval == 0:
                     self.save(self.log_dir/f'model_{self.current_learning_iteration}.pt')
@@ -206,6 +254,8 @@ class FlashSACRunner:
         state = torch.load(temporary, map_location='cpu', weights_only=True)
         state['public_runner'] = dict(version=1, iteration=self.current_learning_iteration, elapsed_s=self._elapsed(), infos=infos,
                                       smp_state=self._smp_state(), simulator_state_saved=False)
+        if self.generic_reward_provider is not None:
+            state['public_runner']['reward_provider_state'] = self.generic_reward_provider.state_dict()
         torch.save(state, temporary)
         os.replace(temporary, path)
 
@@ -219,6 +269,8 @@ class FlashSACRunner:
             raise ValueError('Public runner checkpoint contract mismatch')
         # Live env is not checkpointed. Import persistent state, then reset
         # collection and all task-owned episode histories.
+        if self.generic_reward_provider is not None and 'reward_provider_state' not in public:
+            raise ValueError('Checkpoint missing generic reward provider state')
         self.last_load_info = self.alg.load(path, restore_rng=(load_cfg or {}).get('rng', True))
         saved_smp = public.get('smp_state')
         if saved_smp is not None:
@@ -227,9 +279,15 @@ class FlashSACRunner:
                 loader = getattr(self.env, 'load_smp_state_dict', None)
                 if loader is None: raise ValueError('SMP checkpoint requires env.load_smp_state_dict')
                 loader(saved_smp)
+        if self.generic_reward_provider is not None:
+            if 'reward_provider_state' not in public:
+                raise ValueError('Checkpoint missing generic reward provider state')
+            self.generic_reward_provider.load_state_dict(public['reward_provider_state'])
         reset = getattr(self.env, 'reset', None)
         if reset is None: raise ValueError('Fresh-environment restore requires env.reset()')
         reset()
+        if self.generic_reward_provider is not None:
+            self.generic_reward_provider.reset()
         if self.reward_provider is not None:
             self.reward_provider.reset()
         self._obs = observation_groups(self.env.get_observations(), self.groups, self.env.num_envs, self.device)

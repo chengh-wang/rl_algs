@@ -9,6 +9,7 @@ import random
 import numpy as np
 import torch
 from .config import RunnerConfig, UPSTREAM_COMMIT
+from .normalization import make_reward_normalizer, reward_denominator
 
 from mbdac.vendor.flashsac.spaces import ShapeSpace
 from mbdac.vendor.flashsac.agent import (
@@ -43,11 +44,11 @@ class FlashSACRunner:
         self.count = torch.tensor(0, dtype=torch.int32, device=self.device)
         self.repeat = torch.tensor(1, dtype=torch.int32, device=self.device)
         self.cdf = _build_truncated_zeta_cdf(2., 16).to(self.device)
-        self.normalizer = RewardNormalizer(.99, 5., True, self.device)
+        self.normalizer = make_reward_normalizer(cfg, self.device, num_envs)
         self.replay = TorchUniformBuffer(
             ShapeSpace((actor_dim+critic_dim,), np.float32),
             ShapeSpace((action_dim,), np.float32),
-            n_step=1, gamma=.99, max_length=cfg.capacity, min_length=cfg.warmup,
+            n_step=1, gamma=cfg.gamma, max_length=cfg.capacity, min_length=cfg.warmup,
             sample_batch_size=cfg.batch_size, device_type=cfg.device)
         self.update_step = self.vector_steps = self.transitions = 0
 
@@ -64,10 +65,19 @@ class FlashSACRunner:
         return action.clone()
 
     def observe(self, transition):
+        stats_reward = transition.get('task_reward', transition['reward'])
+        if 'task_reward' in transition and (not isinstance(stats_reward, torch.Tensor)
+                or stats_reward.shape != transition['reward'].shape or not stats_reward.is_floating_point()
+                or stats_reward.device != transition['reward'].device or not torch.isfinite(stats_reward).all()):
+            raise ValueError('task_reward must be a finite floating vector matching reward shape/device')
         self.replay.add(transition)
-        self.normalizer.update_reward_stats(transition['reward'], transition['terminated'], transition['truncated'])
+        self.normalizer.update_reward_stats(stats_reward, transition['terminated'], transition['truncated'])
         self.vector_steps += 1
         self.transitions += len(transition['reward'])
+
+    @property
+    def reward_scale(self):
+        return reward_denominator(self.normalizer, self.cfg)
 
     def batch(self, indices=None):
         batch = self.replay.sample(indices)
@@ -90,7 +100,18 @@ class FlashSACRunner:
         self.update_step += 1
         metrics['reward/raw'] = batch['raw_reward'].mean()
         metrics['reward/normalized'] = batch['reward'].mean()
+        if self.cfg.critic_diagnostics:
+            self._add_reward_unit_diagnostics(metrics)
         return {k: v.detach().clone() for k, v in metrics.items()}
+
+    def _add_reward_unit_diagnostics(self, metrics):
+        # No policy/critic/temperature forward call and no RNG consumption.
+        denominator = self.reward_scale.detach()
+        alpha = metrics.get('temperature/value')
+        if alpha is None:
+            alpha = raw_module(self.temperature).log_temp.detach().exp()
+        metrics['reward/scale'] = denominator
+        metrics['temperature/raw_unit_value'] = denominator * alpha.detach()
 
     def save(self, path, include_replay=False):
         """Save learner state. Simulator state is NOT saved: not an exact env resume."""
@@ -132,15 +153,15 @@ class FlashSACRunner:
             state['contract'] != self.contract or state['dimensions'] !=
             [self.actor_dim,self.critic_dim,self.action_dim,self.num_envs]):
             raise ValueError('Checkpoint environment/action/observation contract mismatch')
-        # Compilation is a runtime choice, not a change to network state keys.
-        allowed = {'use_compile', 'compile_mode'}
+        # Compilation and diagnostics are runtime choices, not model/reward units.
+        allowed = {'use_compile', 'compile_mode', 'critic_diagnostics'}
         old_capacity = state['config']['capacity']
         capacity_changed = old_capacity != self.cfg.capacity
         if capacity_changed and allow_cold_replay_resize:
             if state['replay'] is not None or continue_same_environments:
                 raise ValueError('Replay resize requires a cold, fresh-environment resume')
             allowed.add('capacity')
-        if any(state['config'].get(k, 'highest' if k == 'float32_matmul_precision' else None) != v
+        if any(state['config'].get(k, asdict(RunnerConfig()).get(k)) != v
                for k,v in asdict(self.cfg).items() if k not in allowed):
             raise ValueError('Checkpoint algorithm/replay configuration mismatch')
         for name, net in self.networks.items():

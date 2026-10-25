@@ -190,6 +190,7 @@ checkout. Its setup does not use this repository's MJLab 1.2 lockfile or extra.
 - [Model-based environment contract](doc/task_contract.md)
 - [Physical primitive heads and task formulas](doc/general_task_interface.md)
 - [SMP / FlashSAC API, training and integration](doc/smp_flashsac.md)
+- [Precision tasks: reward objectives, shaping and learner diagnostics](doc/precision_rewards.md)
 - [World-model, actor and critic update schedules](doc/update_schedule_audit.md)
 - [MBDAC implementation audit](doc/mbdac_audit_2026-10-24.md)
 - [Method references, source attribution and notices](licenses/PROVENANCE.md)

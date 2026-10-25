@@ -1,0 +1,40 @@
+{
+  "algorithm": {
+    "class_name": "FlashSAC",
+    "capacity": 65536,
+    "warmup": 4096,
+    "batch_size": 256,
+    "updates_per_step": 1,
+    "schedule_updates": 4969,
+    "gamma": 0.99,
+    "critic_min_v": -5.0,
+    "critic_max_v": 5.0,
+    "critic_num_bins": 101,
+    "reward_normalization": "fixed",
+    "reward_scale": 1.0,
+    "target_sigma": 0.05,
+    "initial_temperature": 0.001,
+    "use_compile": true,
+    "compile_mode": "default",
+    "use_amp": true,
+    "critic_diagnostics": true,
+    "seed": 42
+  },
+  "obs_groups": {
+    "actor": [
+      "goal"
+    ],
+    "critic": [
+      "goal"
+    ]
+  },
+  "logger": "json",
+  "log_interval": 100,
+  "save_interval": 5001,
+  "task_contract": {
+    "kind": "precision_bandit",
+    "mode": "additive",
+    "style_weight": 0.4,
+    "goal_stream_sha256": "32c8b820ce249b8bd649f783c084ebfbcbc16fed12eda6b802dce206eda488d7"
+  }
+}

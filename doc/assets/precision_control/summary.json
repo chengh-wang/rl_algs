@@ -1,0 +1,268 @@
+{
+  "aggregates": {
+    "task_only": {
+      "seeds": 2,
+      "task_l2_rmse_mean": 0.025897077284753323,
+      "own_l2_rmse_mean": 0.025897077284753323,
+      "task_bias_xy_mean": [
+        -0.004838557098992169,
+        0.014913728926330805
+      ]
+    },
+    "additive": {
+      "seeds": 2,
+      "task_l2_rmse_mean": 0.1118461862206459,
+      "own_l2_rmse_mean": 0.029238791204988956,
+      "task_bias_xy_mean": [
+        0.1095556989312172,
+        -0.007994543702807277
+      ]
+    },
+    "potential": {
+      "seeds": 2,
+      "task_l2_rmse_mean": 0.023956557735800743,
+      "own_l2_rmse_mean": 0.023956557735800743,
+      "task_bias_xy_mean": [
+        -0.005619291856419295,
+        0.013727553654462099
+      ]
+    }
+  },
+  "runs": [
+    {
+      "seed": 42,
+      "mode": "task_only",
+      "vector_steps": 5000,
+      "transitions": 640000,
+      "updates": 4969,
+      "elapsed_s": 79.96892025199486,
+      "goal_stream_sha256": "32c8b820ce249b8bd649f783c084ebfbcbc16fed12eda6b802dce206eda488d7",
+      "samples": 1681,
+      "task_optimum": {
+        "mean_bias_xy": [
+          -0.001329674618318677,
+          0.012790563516318798
+        ],
+        "xy_rmse": [
+          0.012353265658020973,
+          0.016944095492362976
+        ],
+        "l2_rmse": 0.020969156175851822,
+        "mean_l2_error": 0.01923457160592079,
+        "success_fraction_l2_le_0p02": 0.5181439518928528
+      },
+      "own_objective_optimum": {
+        "mean_bias_xy": [
+          -0.001329674618318677,
+          0.012790563516318798
+        ],
+        "xy_rmse": [
+          0.012353265658020973,
+          0.016944095492362976
+        ],
+        "l2_rmse": 0.020969156175851822,
+        "mean_l2_error": 0.01923457160592079,
+        "success_fraction_l2_le_0p02": 0.5181439518928528
+      },
+      "raw_task_return": -0.00043970553088001907,
+      "style_mean": 0.4993351399898529,
+      "composed_return": -0.00043970553088001907
+    },
+    {
+      "seed": 42,
+      "mode": "additive",
+      "vector_steps": 5000,
+      "transitions": 640000,
+      "updates": 4969,
+      "elapsed_s": 50.814657511000405,
+      "goal_stream_sha256": "32c8b820ce249b8bd649f783c084ebfbcbc16fed12eda6b802dce206eda488d7",
+      "samples": 1681,
+      "task_optimum": {
+        "mean_bias_xy": [
+          0.09218189120292664,
+          -0.0018668061820790172
+        ],
+        "xy_rmse": [
+          0.09390346705913544,
+          0.012586772441864014
+        ],
+        "l2_rmse": 0.0947432667016983,
+        "mean_l2_error": 0.09298433363437653,
+        "success_fraction_l2_le_0p02": 0.0
+      },
+      "own_objective_optimum": {
+        "mean_bias_xy": [
+          -0.007818111218512058,
+          -0.0018668061820790172
+        ],
+        "xy_rmse": [
+          0.01953158527612686,
+          0.012586772441864014
+        ],
+        "l2_rmse": 0.023235956206917763,
+        "mean_l2_error": 0.019780386239290237,
+        "success_fraction_l2_le_0p02": 0.6026175022125244
+      },
+      "raw_task_return": -0.008976287208497524,
+      "style_mean": 0.5460909605026245,
+      "composed_return": 0.2094600945711136
+    },
+    {
+      "seed": 42,
+      "mode": "potential",
+      "vector_steps": 5000,
+      "transitions": 640000,
+      "updates": 4969,
+      "elapsed_s": 50.375134878995595,
+      "goal_stream_sha256": "32c8b820ce249b8bd649f783c084ebfbcbc16fed12eda6b802dce206eda488d7",
+      "samples": 1681,
+      "task_optimum": {
+        "mean_bias_xy": [
+          -0.0011928047752007842,
+          0.009250099770724773
+        ],
+        "xy_rmse": [
+          0.012053201906383038,
+          0.01317286305129528
+        ],
+        "l2_rmse": 0.0178550835698843,
+        "mean_l2_error": 0.015663469210267067,
+        "success_fraction_l2_le_0p02": 0.7186198234558105
+      },
+      "own_objective_optimum": {
+        "mean_bias_xy": [
+          -0.0011928047752007842,
+          0.009250099770724773
+        ],
+        "xy_rmse": [
+          0.012053201906383038,
+          0.01317286305129528
+        ],
+        "l2_rmse": 0.0178550835698843,
+        "mean_l2_error": 0.015663469210267067,
+        "success_fraction_l2_le_0p02": 0.7186198234558105
+      },
+      "raw_task_return": -0.00031880399910733104,
+      "style_mean": 0.49940356612205505,
+      "composed_return": -0.20031879842281342
+    },
+    {
+      "seed": 43,
+      "mode": "task_only",
+      "vector_steps": 5000,
+      "transitions": 640000,
+      "updates": 4969,
+      "elapsed_s": 48.6056841009995,
+      "goal_stream_sha256": "03e1480b7a86e6f8b4eb0dba765fee0e50c456f33c5b50649f7f9a0905c00e3b",
+      "samples": 1681,
+      "task_optimum": {
+        "mean_bias_xy": [
+          -0.00834743957966566,
+          0.01703689433634281
+        ],
+        "xy_rmse": [
+          0.014204420149326324,
+          0.027357175946235657
+        ],
+        "l2_rmse": 0.030824998393654823,
+        "mean_l2_error": 0.027068115770816803,
+        "success_fraction_l2_le_0p02": 0.41641879081726074
+      },
+      "own_objective_optimum": {
+        "mean_bias_xy": [
+          -0.00834743957966566,
+          0.01703689433634281
+        ],
+        "xy_rmse": [
+          0.014204420149326324,
+          0.027357175946235657
+        ],
+        "l2_rmse": 0.030824998393654823,
+        "mean_l2_error": 0.027068115770816803,
+        "success_fraction_l2_le_0p02": 0.41641879081726074
+      },
+      "raw_task_return": -0.0009501805761829019,
+      "style_mean": 0.49582627415657043,
+      "composed_return": -0.0009501805761829019
+    },
+    {
+      "seed": 43,
+      "mode": "additive",
+      "vector_steps": 5000,
+      "transitions": 640000,
+      "updates": 4969,
+      "elapsed_s": 50.04242236599384,
+      "goal_stream_sha256": "03e1480b7a86e6f8b4eb0dba765fee0e50c456f33c5b50649f7f9a0905c00e3b",
+      "samples": 1681,
+      "task_optimum": {
+        "mean_bias_xy": [
+          0.12692950665950775,
+          -0.014122281223535538
+        ],
+        "xy_rmse": [
+          0.127900168299675,
+          0.016414044424891472
+        ],
+        "l2_rmse": 0.1289491057395935,
+        "mean_l2_error": 0.12800273299217224,
+        "success_fraction_l2_le_0p02": 0.0
+      },
+      "own_objective_optimum": {
+        "mean_bias_xy": [
+          0.026929501444101334,
+          -0.014122281223535538
+        ],
+        "xy_rmse": [
+          0.031185755506157875,
+          0.016414044424891472
+        ],
+        "l2_rmse": 0.03524162620306015,
+        "mean_l2_error": 0.03243100643157959,
+        "success_fraction_l2_le_0p02": 0.20464009046554565
+      },
+      "raw_task_return": -0.016627872362732887,
+      "style_mean": 0.5634647011756897,
+      "composed_return": 0.20875802636146545
+    },
+    {
+      "seed": 43,
+      "mode": "potential",
+      "vector_steps": 5000,
+      "transitions": 640000,
+      "updates": 4969,
+      "elapsed_s": 51.11713111300196,
+      "goal_stream_sha256": "03e1480b7a86e6f8b4eb0dba765fee0e50c456f33c5b50649f7f9a0905c00e3b",
+      "samples": 1681,
+      "task_optimum": {
+        "mean_bias_xy": [
+          -0.010045778937637806,
+          0.018205007538199425
+        ],
+        "xy_rmse": [
+          0.01965247467160225,
+          0.02274347096681595
+        ],
+        "l2_rmse": 0.030058031901717186,
+        "mean_l2_error": 0.0278738122433424,
+        "success_fraction_l2_le_0p02": 0.26531824469566345
+      },
+      "own_objective_optimum": {
+        "mean_bias_xy": [
+          -0.010045778937637806,
+          0.018205007538199425
+        ],
+        "xy_rmse": [
+          0.01965247467160225,
+          0.02274347096681595
+        ],
+        "l2_rmse": 0.030058031901717186,
+        "mean_l2_error": 0.0278738122433424,
+        "success_fraction_l2_le_0p02": 0.26531824469566345
+      },
+      "raw_task_return": -0.000903485284652561,
+      "style_mean": 0.49497708678245544,
+      "composed_return": -0.20090347528457642
+    }
+  ],
+  "interpretation": "Task-optimum errors and own-objective errors answer different questions; report both."
+}

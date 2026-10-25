@@ -180,6 +180,7 @@ def update_critic(
     device: torch.device,
     use_amp: bool,
     grad_scaler: Optional[GradScaler],
+    diagnose: bool = False,
 ) -> dict[str, torch.Tensor]:
     """Update critic network.
 
@@ -250,6 +251,13 @@ def update_critic(
 
         ce_loss = -(target_probs.unsqueeze(0) * pred_log_probs).sum(dim=-1)  # (2, B)
         critic_loss = ce_loss.mean()
+        diagnostic_info = {}
+        if diagnose:
+            from mbdac.flashsac.diagnostics import categorical_support_diagnostics
+            diagnostic_info = categorical_support_diagnostics(
+                next_q_log_probs, batch["reward"], batch["terminated"],
+                next_actor_entropy, gamma**n_step, min_v, max_v,
+                pred_log_probs, target_probs)
 
     # Gradient step
     assert critic.optimizer is not None
@@ -273,6 +281,7 @@ def update_critic(
     update_info = {
         "loss": critic_loss,
         "max_entropy_bonus": max_entropy_bonus,
+        **diagnostic_info,
     }
     update_info = add_prefix_to_keys(update_info, "critic")
 

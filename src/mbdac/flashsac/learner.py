@@ -31,11 +31,15 @@ def prepare_actor_initialization(path, contract, *, include_normalizer=False, in
         metadata['behavior'] = 'actor_critic_target_and_reward_units_initialization_for_new_objective_not_resume'
         if state.get('version') != 1 or state.get('upstream_commit') != UPSTREAM_COMMIT:
             raise ValueError('Value source checkpoint version/upstream mismatch')
-        units = config_factory(**state['config']).upstream(state['dimensions'][2])
+        source_options = config_factory(**state['config'])
+        units = source_options.upstream(state['dimensions'][2])
         metadata['value_initialization'] = dict(kind='matched_critic_target_and_reward_units_for_new_objective_not_resume',
             models=['critic', 'target'], reward_statistics=['G_r_max', 'mean', 'var', 'count'],
             reward_units={k:getattr(units,k) for k in ('normalize_reward','normalized_G_max','gamma','n_step','critic_num_bins','critic_min_v','critic_max_v')},
             fresh_episode_return=True, fresh_optimizers_replay_counters_temperature_rng=True)
+        if getattr(source_options, 'reward_normalization', 'legacy') != 'legacy':
+            metadata['value_initialization']['reward_units'].update(
+                reward_normalization=source_options.reward_normalization, reward_scale=source_options.reward_scale)
     normalizer = None
     if include_normalizer:
         side = path.with_suffix('.smp.pt')
@@ -61,10 +65,28 @@ def _check_tensors(target, source, name):
             raise ValueError(f'{name} tensor is nonfinite: {key}')
 
 
-def initialize_actor_only(learner, state, *, prior_normalizer=None, normalizer_state=None):
-    """Leave critic, target, temperature, optimizers, replay, RNG and counters fresh."""
+def _validate_initialization_units(learner, state, config_factory=RunnerConfig):
+    options = config_factory(**state['config'])
+    for key, default in (('reward_normalization','legacy'), ('reward_scale',1.)):
+        if getattr(options,key,default) != getattr(learner.cfg,key,default):
+            raise ValueError(f'Initialization normalization units mismatch: {key}')
+    effective = options.upstream(learner.action_dim)
+    for key in ('gamma','critic_min_v','critic_max_v','critic_num_bins'):
+        if getattr(effective,key) != getattr(learner.upstream_cfg,key):
+            raise ValueError(f'Initialization value units mismatch: {key}')
+    return effective
+
+
+def initialize_actor_only(learner, state, *, prior_normalizer=None, normalizer_state=None, config_factory=RunnerConfig):
+    """Transfer actor coordinates only; value/reward units may change.
+
+    Leave critic, target, temperature, optimizers, replay, RNG and counters fresh.
+    Value-unit compatibility is required only for matched value transfer.
+    """
     if list(state['dimensions'][:3]) != [learner.actor_dim, learner.critic_dim, learner.action_dim]:
         raise ValueError('Actor initialization dimensions mismatch')
+    # Actor weights/BN depend on observation/action coordinates, not value units.
+    # Caller contract and dimensional checks govern actor-only transfer.
     actor = raw_module(learner.actor)
     weights = state['networks']['actor']['model']
     _check_tensors(actor.state_dict(), weights, 'actor')
@@ -89,7 +111,7 @@ def initialize_value_from_actor_source(learner, state, *, config_factory=RunnerC
         raise ValueError('Value source checkpoint version/upstream mismatch')
     if list(state['dimensions'][:3]) != [learner.actor_dim, learner.critic_dim, learner.action_dim]:
         raise ValueError('Value source dimensions mismatch')
-    source_cfg = config_factory(**state['config']).upstream(learner.action_dim)
+    source_cfg = _validate_initialization_units(learner,state,config_factory)
     for key in ('normalize_reward', 'normalized_G_max', 'gamma', 'n_step',
                 'critic_num_bins', 'critic_min_v', 'critic_max_v'):
         if getattr(source_cfg, key) != getattr(learner.upstream_cfg, key):
@@ -145,4 +167,6 @@ class SMPFlashSACRunner(FlashSACRunner):
         self.update_step += 1
         metrics['reward/raw'] = batch['raw_reward'].mean()
         metrics['reward/normalized'] = batch['reward'].mean()
+        if self.cfg.critic_diagnostics:
+            self._add_reward_unit_diagnostics(metrics)
         return {k: v.detach().clone() for k, v in metrics.items()}

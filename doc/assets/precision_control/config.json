@@ -1,0 +1,62 @@
+{
+  "arguments": {
+    "output": "/home/chengh-wang/.codex/worktrees/4104/mjlab_unitree_r1/outputs/precision_framework_audit_20261025/benchmark",
+    "steps": 5000,
+    "num_envs": 128,
+    "batch_size": 256,
+    "warmup": 4096,
+    "capacity": 65536,
+    "updates": 1,
+    "seeds": [
+      42,
+      43
+    ],
+    "modes": [
+      "task_only",
+      "additive",
+      "potential"
+    ],
+    "device": "cuda:0",
+    "compile_mode": "default",
+    "no_compile": false,
+    "no_amp": false,
+    "log_every": 100,
+    "grid_size": 41,
+    "plot": true
+  },
+  "algorithm": {
+    "class_name": "FlashSAC",
+    "capacity": 65536,
+    "warmup": 4096,
+    "batch_size": 256,
+    "updates_per_step": 1,
+    "schedule_updates": 4969,
+    "gamma": 0.99,
+    "critic_min_v": -5.0,
+    "critic_max_v": 5.0,
+    "critic_num_bins": 101,
+    "reward_normalization": "fixed",
+    "reward_scale": 1.0,
+    "target_sigma": 0.05,
+    "initial_temperature": 0.001,
+    "use_compile": true,
+    "compile_mode": "default",
+    "use_amp": true,
+    "critic_diagnostics": true
+  },
+  "task": "one-step terminal normalized 2D position, goal uniform[-.3,.3]^2",
+  "raw_task": "-sum((action-goal)^2)",
+  "style": "(action_x+1)/2",
+  "style_weight": 0.4,
+  "additive_optimum": "(goal_x+0.1,goal_y)",
+  "task_and_potential_optimum": "goal",
+  "optimum_semantics": "Analytic unregularized deterministic reward optimum; SAC also optimizes its configured entropy term",
+  "potential": "Phi(initial x=0)=0.2; Phi(terminal)=0; reward=task-0.2",
+  "success_threshold": {
+    "l2": 0.02,
+    "meaning": "descriptive threshold, not acceptance criterion"
+  },
+  "goal_stream": "CPU generator seed=learner seed+100000; matched across modes, isolated from learner RNG",
+  "evaluation": "fixed grid frozen before training, excluded from sampled training goals; no evaluation-based tuning",
+  "limitations": "Analytic counterexample and public runner code-path test; no real-robot generalization claim"
+}

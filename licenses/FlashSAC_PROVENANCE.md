@@ -43,6 +43,25 @@ The local learner adapter was extracted from `src/rl/flashsac/{config,runner}.py
 
 Intentional numerical compatibility includes the upstream reward-normalizer terminal carry behavior: `new_G_r = gamma * (1 - done) * G_r + reward`. The previous return is cleared on a done transition before including its reward; this terminal reward consequently remains in `G_r` on the following fresh-episode update. This extraction does not silently correct that behavior. Simulator resets do not imply learner-state equivalence.
 
+Opt-in precision extensions retain that default path: the adapter provides a
+corrected `episodic` normalizer and a constant-divisor `fixed` normalizer outside
+the vendored files, configurable discount/value support, and a separately
+versioned potential-based reward provider. The vendored `agent.py` and
+`update.py` additionally forward a disabled-by-default `critic_diagnostics`
+flag and report probability-weighted support diagnostics from existing critic
+tensors. These diagnostics add no sampling, network forwards or loss terms.
+They are local extensions, not features attributed to the pinned upstream
+commit. Default fixed-RNG update/state parity and diagnostic on/off parity are
+covered by tests. See [precision controls](../doc/precision_rewards.md) for the
+intentional opt-in numerical changes and their limitations.
+
+SHA-256 of the two diagnostic-extended vendored files:
+
+| File | SHA-256 |
+| --- | --- |
+| `agent.py` | `fbbf0d1d117f46a848756c4a47c56e74df644f40e8db4cb7e518fe999dd47745` |
+| `update.py` | `48a40323139b9896893e6129c65fda6bb9631244f7c007c33286968384c84f68` |
+
 CPU checkpoints do not initialize or save CUDA RNG state. CUDA RNG is preserved for CUDA learners. Optional calibration fields default to None; legacy checkpoints missing those fields are accepted when current settings are None. Opaque caller contracts still require exact equality for learner resume. Initialization may compare an explicit caller-supplied subset of contract keys, and is declared as a new learner initialization rather than simulator resume.
 
 The standalone regression suite performs exact fixed-RNG comparisons against the original local learner plus pinned upstream numerical implementation when `FLASHSAC_PARITY_CHECKOUT` and `FLASHSAC_ROOT` are supplied. It compares initial network parameters, sampled replay batches including normalized rewards, three action/update iterations (every metric and every model/BN tensor), and an original-format replay checkpoint's following update. Without that optional external fixture, all independent CPU tests run without the original checkout or Gymnasium.

@@ -74,6 +74,7 @@ class FlashSACConfig:
 
     load_optimizer: bool
     load_reward_normalizer: bool
+    critic_diagnostics: bool = False
 
 
 def _init_flashsac_networks(
@@ -304,6 +305,7 @@ def _update_networks(
         device=device,
         use_amp=cfg.use_amp,
         grad_scaler=grad_scaler,
+        diagnose=cfg.critic_diagnostics,
     )
 
     target_critic_info = update_target_network(

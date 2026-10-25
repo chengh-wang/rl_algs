@@ -1,0 +1,44 @@
+{
+  "framework_base_commit": "8f7b99b66b9f65dd239485d892054ec36368a3a3",
+  "source_hashes": {
+    "src/mbdac/flashsac/learner.py": "dac0e2d2f4c8a643fa884fd470f815b84f1ee5454b48dce60809cb28c94864a2",
+    "src/mbdac/flashsac/config.py": "9ecfdbf085d9c3c355d3687327a0721ebf42dad277fbf7f8f5e6326f895ab5bb",
+    "src/mbdac/flashsac/runner.py": "db4646486a0ee43a92bcb1cdb454b28c516f60c131f95e81a5763808a4556784",
+    "src/mbdac/flashsac/__init__.py": "e54429981b63908c974aa4f4f978a94b989300cd43c26590708260c546430902",
+    "src/mbdac/flashsac/normalization.py": "fd734e5eba42713df368c35713d8eadffe2b9f43db3d9ee6adbafefa2a19c16e",
+    "src/mbdac/flashsac/diagnostics.py": "84ee91c37a4f130d5e4931814dccc9959ed85d6086858b924a57bdd1815fa449",
+    "src/mbdac/rewards/potential.py": "7749efc75c2c0edae4386ea4acdb42445ad2a551eb24b3fe8eac9ea8b42f4752",
+    "src/mbdac/rewards/__init__.py": "44217e60d062cf0e6c25948ad235f3f519f5c868d793b5e85eea3ddc492728d7",
+    "src/mbdac/runners/flash_sac_runner.py": "fa52d25e48fe03a179782bc0e708740c4d6906e5ca6208910202549960e8510a",
+    "src/mbdac/vendor/flashsac/agent.py": "fbbf0d1d117f46a848756c4a47c56e74df644f40e8db4cb7e518fe999dd47745",
+    "src/mbdac/vendor/flashsac/update.py": "48a40323139b9896893e6129c65fda6bb9631244f7c007c33286968384c84f68",
+    "examples/precision_control/__init__.py": "f6ee6c8423b96f608253dccf259d88e800ff206bb29af28a86ee90adde78e059",
+    "examples/precision_control/benchmark.py": "9f5c2434f2a3e1cd89e534124d25ec5cc6c92f32f7fd11ca3ae2635f3fccd2e8"
+  },
+  "artifact_hashes": {
+    "config.json": "72de436089db0f6e4b1dd69dfdff828565a7a5b5741880604dc1a3a5d8f46bc2",
+    "summary.json": "0b647b1557ea696b40b1280ec20feb63fc930e7f493356b109abf7dc640d34f5",
+    "errors.png": "2f42f1683faf307a5edaa8a836a384ee973dc183cb9119778e8207c753dceb63",
+    "evaluation_goals.npy": "f359d364a8715de91773a0d2349dfbd5036fd11ec29b1ac8d7fa6b3d2ad43b6c",
+    "run_config_seed42_additive.json": "7cd161ac971eaf3f0be9c25b820f2d8d2d468972a0aaea58458c5ec423a600e2",
+    "run_config_seed42_task_only.json": "253c8c054e8d06026fff716058ad2f7e0e8361b970f876216fba4046f6dca587",
+    "run_config_seed43_task_only.json": "f6cf42ee3faaf7101ed66a480f7eee0c7d39683f9523945c7da6875a8902739f",
+    "run_config_seed43_additive.json": "33c994e95732dce7ed42b5f3d44cf05e1e99b39adc5a38edfd5315d0014ec387",
+    "run_config_seed42_potential.json": "a0bdab3a5512682310901b39e95ce909b75037520212141dc58fa73f1d2d0edb",
+    "run_config_seed43_potential.json": "3cca56a1bd002258355a8a7444aaf2bc8613ae34b512d98b7f77d79017c65409",
+    "runtime.json": "922be26a9c2a70681ce21eed49ceb064a982db25e92a0e03ad8a442c3395b88e"
+  },
+  "physical_generalization_tested": false,
+  "execution_note": "Validation guards and extra logs finalized during run; action/reward/loss/optimizer equations unchanged. Final source hashes recorded here.",
+  "checkpoints": {
+    "seed42/additive/checkpoint.pt": "5f570d8eba705e0c197e6beee1a53c8e48683a839a1d16952283f3c8fd0e5b44",
+    "seed42/task_only/checkpoint.pt": "944cd2bbc1934d3f99816798dbd0982c169461bda042c08640b08391b5c0d8ef",
+    "seed42/potential/checkpoint.pt": "8fd12ed2ef78b228e3478355a6c43d95ff9b6c8158b073d8c4969bf4dde37fa2",
+    "seed43/additive/checkpoint.pt": "57f25b0c0b385c2e6edbeb09d2c2769386ba7465f4d0855a6e2bdccaf8f01e1a",
+    "seed43/task_only/checkpoint.pt": "6172fae0f464f9cf2f704c6e04432cc4c5ec04629417171fb24005e32c58c1e7",
+    "seed43/potential/checkpoint.pt": "71c202e9b945e438cad3c1b85fcde5246a9873d5284fa708bc91644f1df9a7fd"
+  },
+  "validated_wheel_sha256": "1d1991e3608d09b2373149a78b2fb9d0f28773663d833bce93fe649ba028f3e9",
+  "final_wheel_sha256": "a5d2cd2bcc288b9e60e27e90f4755f2d96e4fd1cb18f7c158871a28028a7a882",
+  "wheel_difference": "Documentation/docstring and license provenance only; numerical Python AST unchanged."
+}
