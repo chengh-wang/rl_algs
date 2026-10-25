@@ -18,7 +18,7 @@ BASE_URL = "https://api.forge.coreweave.com"
 ENTITY = "sslab_motion_mimic-teams"
 PROJECT = "mbdac-native-velocity"
 TRIALS = {
-    "native_go1_fastsac_v2": "Holosoma FastSAC",
+    "native_go1_fastsac_v2": "FastSAC",
     "native_go1_mbdac_v3": "MBDAC",
     "native_go1_wm_fastsac_v3": "WM + FastSAC",
     "native_go1_real_only_v3": "Same integration, real SAC only",

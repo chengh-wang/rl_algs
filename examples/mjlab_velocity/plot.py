@@ -7,7 +7,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
-LABELS={'mbdac':'MBDAC','fastsac':'Holosoma FastSAC','wm_fastsac':'WM + FastSAC'}
+LABELS={'mbdac':'MBDAC','fastsac':'FastSAC','wm_fastsac':'WM + FastSAC'}
 
 
 def run_summary(path, rows):

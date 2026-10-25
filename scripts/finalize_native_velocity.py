@@ -51,7 +51,7 @@ def main():
         if not reusable:
             run([sys.executable,'-m','examples.mjlab_velocity.evaluate',str(checkpoint),
                  '--robot',row['robot'],'--out',str(target),'--trajectory'])
-        label={'mbdac':'MBDAC','fastsac':'Holosoma FastSAC','wm_fastsac':'WM + FastSAC'}[row['method']]
+        label={'mbdac':'MBDAC','fastsac':'FastSAC','wm_fastsac':'WM + FastSAC'}[row['method']]
         config=json.loads((path/'config.json').read_text())
         if config.get('recipe')=='real_only':label='Same integration, real SAC only'
         label+=f' | update {row["iteration"]}'

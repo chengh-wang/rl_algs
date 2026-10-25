@@ -2,7 +2,7 @@
 
 Independent PyTorch package for **MBDAC** (model-based differentiable actor-critic) and **MBDACAMP** (the same learner with an AMP motion prior). The public runner follows RSL-RL conventions. Simulator gradients are not required.
 
-Version 0.3 adds **MBDACFastSAC**: the pinned Holosoma FastSAC numerical actor/Q modules, real-only distributional Q fitting, and a short entropy-regularized world-model actor rollout. It is a model-based extension of **Holosoma FastSAC**, not the separate FlashSAC paper implementation. Existing MBDAC/MBDACAMP algorithms and checkpoints remain independent. Early 0.2 FastSAC prototypes omitted Q controller memory and are retained as debugging evidence, not valid method comparisons.
+Version 0.3 adds **MBDACFastSAC**: pinned numerical actor/Q modules from Holosoma, real-only distributional Q fitting, and a short entropy-regularized world-model actor rollout. It is a model-based extension of **FastSAC**, not the separate FlashSAC paper implementation. Existing MBDAC/MBDACAMP algorithms and checkpoints remain independent. Early 0.2 FastSAC prototypes omitted Q controller memory and are retained as debugging evidence, not valid method comparisons.
 
 **Version 0.3.1 now completes the small G1 tracking demo:** checkpoint1500 follows the full 6-second reference in native GPU physics without failure or automatic reset, with joint RMSE0.122rad and global body-position RMSE0.125m. Six distinct reference initial phases also complete their remaining motion. The failed earlier pilot is retained below; this is not a broad motion-library or speed benchmark.
 
@@ -67,7 +67,10 @@ Evaluation writes an MP4 and per-clip survival, return, joint RMSE and body-posi
 
 `--algorithm MBDACAMP` enables the additional adversarial prior. That extension has gradient-isolation tests and actual native 1024-world learning/evaluations; measured velocity quality remains limited. Its discriminator uses real policy transitions and motion reference pairs, while its style reward contributes gradients through imagined actor rollouts. This is an extension to SuperMimic, not a claim that its reference code already contains AMP imitation learning.
 
-## Holosoma FastSAC with a differentiable world model
+## FastSAC with a differentiable world model
+
+The public algorithm names are **FastSAC** for the baseline and **WM+FastSAC**
+for the model-based extension (`MBDACFastSAC` in configuration/API names).
 
 The learning core vendors the unchanged SDK-free `Actor`, `Critic` and categorical projection from Holosoma revision `d18d6cc50f872c15e904a22ceac22313cec955c8`. Apache-2.0 license/NOTICE and a source hash manifest are included in the wheel. Installing Holosoma, Isaac Sim, or another Torch/CUDA environment is unnecessary for this extension.
 
@@ -287,7 +290,7 @@ are explicit recipes; defaults and earlier checkpoints remain compatible.
 ## Design contract
 
 The new [native velocity benchmark](doc/native_velocity_benchmark.md) compares
-MBDAC, upstream Holosoma FastSAC and WM+FastSAC on identical native MJLab Go1
+MBDAC, FastSAC and WM+FastSAC on identical native MJLab Go1
 velocity tasks, with G1 as a second task. It records physical evaluation reward,
 separate XY/yaw RMSE, survival, real transitions and actual elapsed time. All
 networks start from scratch. This is a single-seed nominal experiment; see the
@@ -306,3 +309,7 @@ Algorithm: [SuperMimic](https://arxiv.org/abs/2610.28480), sections 3 and append
 Initial implementation reused under MIT from [zita-ch/supermimic_vibed](https://github.com/zita-ch/supermimic_vibed), pinned at `a1508d42c9d1699a52e8233ab16d08c488441ab9`; see `licenses/` and file headers. This package is an independent implementation and is not the official SuperMimic release.
 
 Interface reference: [RSL-RL](https://github.com/leggedrobotics/rsl_rl), public 5.x runner and TensorDict interfaces.
+
+FastSAC implementation source: [Holosoma](https://github.com/amazon-far/holosoma),
+pinned at `d18d6cc50f872c15e904a22ceac22313cec955c8`. Source attribution,
+Apache-2.0 license and NOTICE are retained in `licenses/` and the vendored modules.

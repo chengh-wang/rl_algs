@@ -1,7 +1,7 @@
 # Native MJLab velocity benchmark — 2026-10-24
 
 The tested WM + FastSAC hybrid learns Go1 velocity tracking from scratch, but
-**does not beat upstream Holosoma FastSAC in wall time**. It reaches the declared
+**does not beat upstream FastSAC in wall time**. It reaches the declared
 acceptance rule sooner than the package's original MBDAC recipe. A matching
 WM-disabled control is also faster than the hybrid in this pilot. G1 transfers
 without a robot-specific learner change, but does not pass every command within
@@ -18,7 +18,7 @@ No development checkpoint initializes a formal run.
 
 | Go1 method | First observed strict pass: active process | Wall time through result availability | XY RMSE (m/s) | Yaw RMSE (rad/s) | Real transitions |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Original Holosoma FastSAC | 309.97 s | **330.53 s (5.51 min)** | 0.04912 | 0.04988 | 3,083,264 |
+| Original FastSAC | 309.97 s | **330.53 s (5.51 min)** | 0.04912 | 0.04988 | 3,083,264 |
 | Original package MBDAC | 2451.07 s | **2544.83 s (42.41 min)** | 0.05246 | 0.04611 | 9,076,736 |
 | WM + FastSAC hybrid | 914.48 s | **955.46 s (15.92 min)** | 0.07986 | 0.07416 | 2,212,864 |
 | Same integration, real SAC only | 611.74 s | **641.65 s (10.69 min)** | 0.06132 | 0.05532 | 2,909,184 |
@@ -77,7 +77,7 @@ are **not** the original time at which an evaluation result was available.
 
 | Method | Adjacent failed / passing saved updates | Logged process minutes: failed → pass | Real transitions: failed → pass | Passing XY / yaw RMSE |
 | --- | --- | ---: | ---: | --- |
-| Original Holosoma FastSAC | 1750 / 2000 | 3.269 → **3.679** | 1,793,024 → **2,049,024** | 0.08553 / 0.07176 |
+| Original FastSAC | 1750 / 2000 | 3.269 → **3.679** | 1,793,024 → **2,049,024** | 0.08553 / 0.07176 |
 | Original package MBDAC | 3250 / 3500 | 38.901 → **41.993** | 8,385,536 → **9,025,536** | 0.04122 / 0.04492 |
 | WM + FastSAC hybrid | 1750 / 2000 | 12.612 → **14.573** | 1,803,264 → **2,059,264** | 0.09246 / 0.06234 |
 | Same integration, real SAC only | 1750 / 2000 | 6.724 → **7.603** | 1,803,264 → **2,059,264** | 0.06267 / 0.08898 |
@@ -103,7 +103,7 @@ The environment's physics, rewards, commands, observations, terminations and
 randomization are shared. All Go1 task fingerprints match. Complete learning
 recipes differ, as the protocol documents:
 
-- The original baseline inherits the unchanged Holosoma FastSAC learning loop,
+- The original baseline inherits the unchanged FastSAC learning loop from Holosoma,
   pinned to `d18d6cc50f872c15e904a22ceac22313cec955c8`.
 - Its actor and Q normalization use sampled replay statistics; the new
   integration uses collected observations. The new actor duplicates the native
@@ -180,7 +180,7 @@ This provenance limitation is preserved rather than reconstructed as an
 original runtime measurement.
 
 Training logs:
-[Holosoma FastSAC](https://forge.coreweave.com/wandb/sslab_motion_mimic-teams/mbdac-native-velocity/runs/ujc6scu7),
+[FastSAC](https://forge.coreweave.com/wandb/sslab_motion_mimic-teams/mbdac-native-velocity/runs/ujc6scu7),
 [MBDAC](https://forge.coreweave.com/wandb/sslab_motion_mimic-teams/mbdac-native-velocity/runs/bvt8gqf1),
 [WM + FastSAC](https://forge.coreweave.com/wandb/sslab_motion_mimic-teams/mbdac-native-velocity/runs/coxfbec2),
 [real-only control](https://forge.coreweave.com/wandb/sslab_motion_mimic-teams/mbdac-native-velocity/runs/7qoi4est),

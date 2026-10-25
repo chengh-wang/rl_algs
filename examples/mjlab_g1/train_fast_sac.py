@@ -1,4 +1,4 @@
-"""Train Holosoma FastSAC + differentiable WM on one native G1 motion clip."""
+"""Train FastSAC + differentiable WM on one native G1 motion clip."""
 import argparse
 import hashlib
 import json

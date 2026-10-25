@@ -4,8 +4,8 @@ Status: controlled v3 training is finished. Go1 passes; G1 passes the aggregate
 gate but misses the strict forward-command threshold. This pilot shows no WM
 wall-time speedup over source FastSAC. See [measured results](native_velocity_results.md).
 
-Goal: improve simulator-independent WM+Holosoma FastSAC, test native MJLab G1
-and Go1 velocity tasks, and compare MBDAC / upstream Holosoma FastSAC /
+Goal: improve simulator-independent WM+FastSAC, test native MJLab G1
+and Go1 velocity tasks, and compare MBDAC / upstream FastSAC /
 WM+FastSAC from scratch. This replaces neither earlier motion tracking results
 nor the separate AMP experiment. No actor, critic, temperature or WM warm start.
 
@@ -106,8 +106,8 @@ below supersede its WM update count, actor learning rate, warmup and replay size
 All actors receive the native single-frame actor observation; commands are also
 passed as the existing model-based goal input (same information). MBDAC uses its
 original deterministic BPTT/lambda-return V algorithm and native task adapter;
-its history is set to one to match policy information. Holosoma FastSAC directly
-inherits the pinned source setup, replay sampling and entire learn/update loop.
+its history is set to one to match policy information. The FastSAC baseline directly
+inherits the pinned Holosoma setup, replay sampling and entire learn/update loop.
 Symmetry is disabled for all methods. WM+FastSAC uses the same locomotion C51
 support/discount/target EMA/Q widths as upstream (101 atoms, gamma .97, tau .125,
 eight Q updates, actor every four Q updates); its model actor batch is 256 and WM

@@ -16,7 +16,7 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 MODEL_NAME = re.compile(r"model_(\d+)\.pt$")
-LABELS = {"mbdac": "MBDAC", "fastsac": "Holosoma FastSAC", "wm_fastsac": "WM + FastSAC"}
+LABELS = {"mbdac": "MBDAC", "fastsac": "FastSAC", "wm_fastsac": "WM + FastSAC"}
 
 
 def sha256(path):
