@@ -1,6 +1,8 @@
 # Native velocity benchmark (2026-10-24)
 
-Status: controlled v3 runs in progress; no WM speedup result yet.
+Status: controlled v3 training is finished. Go1 passes; G1 passes the aggregate
+gate but misses the strict forward-command threshold. This pilot shows no WM
+wall-time speedup over source FastSAC. See [measured results](native_velocity_results.md).
 
 Goal: improve simulator-independent WM+Holosoma FastSAC, test native MJLab G1
 and Go1 velocity tasks, and compare MBDAC / upstream Holosoma FastSAC /

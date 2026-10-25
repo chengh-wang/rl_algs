@@ -1,6 +1,6 @@
 # 2026-10-24：原生速度任务与三方法实验
 
-目标保持 active。用户已同意用 MJLab 原生 Go1 替代 Go2；另一项任务是原生 G1。
+训练已结束，正在完成最终证据归档。用户已同意用 MJLab 原生 Go1 替代 Go2；另一项任务是原生 G1。
 本轮只做速度任务与通用 MBDAC/WM+FastSAC 框架，不改纸飞机、R1、AMP 或 motion tracking reward。
 
 ## 验收与比较
@@ -62,7 +62,8 @@
   稳定验收后停止；总计 1265.79 s（含在线评估），完整子进程含 W&B 同步 1293.24 s。
   同接口的 `native_go1_real_only_v3` 已连续两次逐指令达标并停止：首次含评估 641.65 s，
   XY 0.06132 m/s、yaw 0.05532 rad/s；总过程 954.07 s，完整子进程 962.38 s。
-  当前已启动 `native_g1_wm_fastsac_v3`，1024 世界已进入实际梯度更新，无 OOM。
+  `native_g1_wm_fastsac_v3` 已完成 3000 次更新，无 OOM。最终 aggregate XY 0.13121 m/s、yaw 0.18115 rad/s，全部存活；
+  前进指令 XY 0.21281 m/s，未过逐指令 0.20 阈值，不能说严格收敛。
   所有网络、replay 与 normalization 从零初始化。
 - v3 hybrid 使用与原版相同的 3e-4 actor LR；WM warmup 后使用 0.9 真实 SAC + 0.1 模型 H=8 梯度。
   主比较仍是完整算法配方的比较，不能把差异全部归因于 WM。
@@ -71,10 +72,28 @@
 它不覆盖已有 trial。每轮保存实际 source snapshot，最终从评估 JSONL 生成图。
 视频由实际 native GPU trajectory 渲染，不做 joint smoothing。
 
-三种主方法与同接口对照都已稳定达标；G1 实验、视频和补充密集 checkpoint 评估尚未完成。
+三种 Go1 主方法与同接口对照都已稳定达标；G1 到达预算上限，未严格达标。
+六个视频均完成：20 秒、25 fps、500 帧，CPU 解码和抽帧视觉核查通过。
+补充 checkpoint 评估单列，原始在线评估没有修改。
 该轮混合版首次观测达标比 MBDAC 早、比原版 FastSAC 晚；不能宣称超过原版 FastSAC。
 编译范围、normalization 统计来源和 Q 记忆输入差异已逐项记录在协议中。
 
 0.3.3 独立 wheel 验证：50 passed、5 个可选依赖跳过，28 个子模块不需要 simulator SDK。
 源码和 wheel 内全部 30 项源码/数据文件与 5 项许可证逐字节一致。
 SHA256：`1cca78c45fa242e0f7963c85bdcf1c2ea080aea15ba85ae93ce1311eadaf0bb9`。
+
+## 最终补评与交付
+
+- 原始在线结果可见时间：源 FastSAC 5.51 min，hybrid 15.92 min，MBDAC 42.41 min；同接口 real-only 10.69 min。
+- 另做 38 次新物理 checkpoint 评估，耗时 396.16 s；没有修改原始在线计时或评估记录。
+- 首个通过的普通 checkpoint：源 FastSAC 2000（2,049,024 transitions），hybrid 2000（2,059,264），
+  real-only 2000（2,059,264），MBDAC 3500（9,025,536）。三种 SAC 在该分辨率下样本量近似相同。
+- 对应回溯 logged 时间为 3.679 / 14.573 / 7.603 / 41.993 min；它不是原在线评估结果可见时间。
+- 不再根据稀疏在线采样声称 WM 更省样本。本轮 WM 比 MBDAC 早达标，但没有超过源 FastSAC 或 real-only 对照。
+- 全部训练/开发 smoke 已知进程成本下界 171.88 min；加单独测量的离线工作为 179.66 min，未测 render/工程/测试另计。
+- 主环境最终测试 54 passed、1 个可选 AMP fork 模块跳过；SDK-free wheel 50 passed、5 optional skips。
+- 五个训练 run 的 W&B 评估与本地全部一致。六个最终视频完整解码与视觉检查通过。
+- 最终报告：[`doc/native_velocity_results.md`](../doc/native_velocity_results.md)。
+- 曲线/视频/原始 metrics：`logs/native_velocity_v3_final/`；补评原始记录：`logs/native_go1_refined_checkpoints/`。
+- Package core 保持 simulator-independent；无 simulator derivative，没有针对某个 robot 或 reward 的核心分支。
+- 所有更改仅本地提交，没有 push。

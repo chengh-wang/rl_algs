@@ -263,6 +263,14 @@ trials. Each model-based primary method has a one-hour active-process budget and
 earlier after stable acceptance. Evaluation reward/RMSE plots use actual elapsed
 time and real transitions; iteration counts are not equated across algorithms.
 
+The [measured results](doc/native_velocity_results.md) show Go1 acceptance at
+5.51 wall minutes for upstream FastSAC, 15.92 for WM+FastSAC and 42.41 for
+MBDAC at the original scheduled evaluations. The integration-matched real-only
+control takes 10.69 minutes. This pilot does not establish a WM speedup over
+FastSAC. G1's final aggregate errors pass, but its forward command remains
+slightly above the strict threshold. Videos, raw measurements and separate
+retrospective checkpoint measurements accompany the report.
+
 Version 0.3.2 adds optional measured real-Q feature pairs, known previous-action
 critic features, opt-in BF16/fused FastSAC, optional real-Q pretraining during
 WM warmup, and batched scalar logging. Real contact measurements are preserved
@@ -282,10 +290,11 @@ The new [native velocity benchmark](doc/native_velocity_benchmark.md) compares
 MBDAC, upstream Holosoma FastSAC and WM+FastSAC on identical native MJLab Go1
 velocity tasks, with G1 as a second task. It records physical evaluation reward,
 separate XY/yaw RMSE, survival, real transitions and actual elapsed time. All
-networks start from scratch; results are experimental until the report is filled.
+networks start from scratch. This is a single-seed nominal experiment; see the
+results for stopping rules, retained development costs and integration limits.
 
 - Core learning code imports neither MJLab nor Isaac Lab.
-- Dynamics learn from real simulator transitions; actor/critic learn from short imagined trajectories.
+- Dynamics learn only from real simulator transitions. MBDAC uses imagined actor–critic returns; WM+FastSAC fits Q to real data and combines real SAC with short differentiable model actor rollouts.
 - Reward and observation formulas are reused. Learned heads predict missing **physical primitives** (velocity, contact probability, etc.), never weighted reward totals. Reward weights, targets, tolerances, and scales remain configurable without refitting the primitives.
 - A physical quantity already present in the predicted state or analytic FK does not need a second learned head.
 - Termination thresholds are applied to physical primitives; imagination uses smooth termination probabilities.
