@@ -22,10 +22,11 @@ physics, observations, rewards and action mapping.
 Holosoma **FastSAC** is also available as an external comparison baseline in the
 native velocity example. It is a separate implementation from **FlashSAC**.
 
-**Standalone motion scoring:** [`mbdac.flow_matching`](doc/flow_matching.md)
-trains a Flow Matching motion prior and scores tensor windows independently of
-the learner and simulator. Use it with FlashSAC, PPO or another learner through
-your task's reward adapter. It does not change FlashSAC or own an environment.
+**Flow Matching SMP:** [`mbdac.flow_matching`](doc/flow_matching.md) is a
+standalone algorithm for learning a continuous velocity field from reference
+feature windows and scoring new trajectories. It provides generic tensor
+training, frozen priors and persistent scoring statistics, independent of
+robot layouts, policy learners and simulators.
 
 ## Installation
 

@@ -1,9 +1,10 @@
-"""Simulator-independent continuous Flow Matching SMP and legacy v1 bridge."""
-from .prior import FrozenFlowPrior, PATH_CONTRACT, linear_path
-from .model import FlowVelocityModel
-from .scoring import FlowMotionPrior, FlowMotionScorer, FlowScore, legacy_score_times
+"""Task-independent continuous Flow Matching motion priors."""
+from .prior import FlowMotionPrior, PATH_CONTRACT, linear_path
+from .model import FlowModelConfig, FlowVelocityModel
+from .normalization import FlowErrorNormalizer
+from .scoring import FlowMotionScorer, FlowScore
 from .training import FlowTrainingConfig, train_flow_prior, flow_matching_loss, fit_quantiles
 
-__all__ = ['FlowVelocityModel', 'FlowMotionPrior', 'FlowMotionScorer', 'FlowScore',
-           'FlowTrainingConfig', 'train_flow_prior', 'flow_matching_loss', 'fit_quantiles',
-           'legacy_score_times', 'FrozenFlowPrior', 'PATH_CONTRACT', 'linear_path']
+__all__ = ['FlowModelConfig', 'FlowVelocityModel', 'FlowMotionPrior', 'FlowMotionScorer',
+           'FlowScore', 'FlowErrorNormalizer', 'FlowTrainingConfig', 'train_flow_prior',
+           'flow_matching_loss', 'fit_quantiles', 'PATH_CONTRACT', 'linear_path']

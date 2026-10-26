@@ -1,184 +1,191 @@
-# Flow Matching motion prior
+# Flow Matching Scored Motion Prior
 
-`mbdac.flow_matching` is a standalone, tensor-only motion prior and residual
-scorer. It imports no simulator, robot task, FlashSAC learner or runner. Any
-learner can consume its scalar scores. This is a local Flow Matching variant of
-the SMP scoring idea, not the original diffusion SMP algorithm or an official
-upstream release.
+`mbdac.flow_matching` implements a task-independent **Flow Matching version of
+Scored Motion Prior (SMP)**. It learns a conditional velocity field from reference
+feature windows, then uses velocity prediction residuals to score new windows.
+The module owns the prior algorithm, offline training, scoring and persistent
+scoring statistics. Its runtime uses PyTorch; the array CLI also uses NumPy.
 
-## Responsibility and public interface
+## Algorithm
 
-| Component | Input | Output / responsibility |
-| --- | --- | --- |
-| `FlowVelocityModel` | normalized path point `[B,W,F]`, continuous time `50*tau` `[B]` | conditional velocity `[B,W,F]` |
-| `flow_matching_loss` | model, normalized windows `[B,W,F]` | scalar velocity MSE with gradients |
-| `train_flow_prior` | raw windows `[N,W,F]`, `FlowTrainingConfig`, output directory | path to a new `prior.pt` |
-| `FlowMotionPrior.load_checkpoint` | checkpoint, expected dimensions/schema | frozen network and training quantiles |
-| `FlowMotionScorer` | prior, explicit continuous times, scoring settings | stateful scorer independent of any learner |
-| `scorer.score` | raw windows `[B,W,F]`, optional noise or generator | `FlowScore` tensors described below |
-
-`B` is batch size, `W` is window length, `F` is feature dimension; none is fixed
-to R1, a hand or a particular simulator. Inputs must be finite floating tensors.
-Feature order, units, frames and sample interval must match training. Store them
-in `feature_schema` and pass `expected_feature_schema` when loading. This metadata
-is an equality contract; the prior cannot infer the physical meaning of a tensor.
-
-The task owns state reading, kinematics/retargeting, history, reset masks,
-terminal observations, reward composition, action mapping and physics. Supply
-only complete valid windows; do not score reset padding or concatenate different
-episodes. Score a terminal window before clearing its history. The module never
-combines task rewards, multiplies by a simulator time step or initializes a robot.
-
-## Offline training
-
-For raw training windows `F`, training-only per-feature q01/q99 scaling is
+Let a reference feature window be `F` with shape `[W,D]`. Training-only feature
+quantiles define normalized data
 
 ```text
 X = 2 * (F - q_low) / (q_high - q_low + 1e-8) - 1
 ```
 
-The upper quantile is raised to at least `q_low + span_floor`; values are not
-clipped. Every supplied window is a training sample. Split reference clips before
-window extraction if validation is needed; overlapping windows are not an
-independent validation set.
-
-For each normalized window, independently draw `epsilon ~ N(0,I)` and
-`tau ~ Uniform[0,1)`:
+The quantile probabilities and minimum span are configurable; defaults are
+q01/q99 and1e-4. Values are not clipped. For each window, sample Gaussian noise
+and a continuous time:
 
 ```text
-x_tau = (1 - tau) * epsilon + tau * X
+epsilon ~ Normal(0,I), tau ~ Uniform[0,1)
+x_tau = (1-tau) * epsilon + tau * X
 u = X - epsilon
-loss = mean((v_theta(x_tau, 50*tau) - u)**2)
+L(theta) = mean((v_theta(x_tau, tau) - u)**2)
 ```
 
-Zero is the noise endpoint; one is the data endpoint. Time stays continuous.
-The model reuses the existing SMP DiT architecture and state keys, trained with
-a new velocity target. Diffusion epsilon weights cannot be substituted for a
-trained Flow checkpoint.
+The noise endpoint is0 and the data endpoint is1. `FlowVelocityModel` is a
+continuous-time DiT. Its public input time is always `tau in [0,1]`; optional
+`time_embedding_scale` rescales the internal sinusoidal embedding and is part
+of the checkpointed model configuration (default1).
+
+After training, freeze the model. At each explicitly configured scoring time,
+sample independent noise and calculate
+
+```text
+e_k(X) = mean_W,D((v_theta(x_tau_k, tau_k) - (X-epsilon_k))**2)
+s(X) = exp(-ws * mean_k(e_k(X) / max(mu_k, min_value)))
+```
+
+Here `mu_k` is a saved count-weighted error mean. `normalize=False` selects
+raw mean error for the exponential. The result is a residual-derived style
+score. It is not a probability density or task success probability. Sampling a
+trajectory with an ODE solver is outside the current public API.
+
+## Generic task boundary
+
+All inputs are finite floating tensors `[N,W,D]`. Window length and feature
+width are model configuration, with `W=1` supported. There are no robot names,
+joint counts, units, coordinate frames, simulator handles or task rewards in
+the algorithm. A task may supply locomotion features, hand/object trajectories
+or another reference representation through the same interface.
+
+The caller defines feature ordering, units, frames, sample interval and complete
+window validity. `feature_schema` is an optional mapping that records this
+layout; `expected_feature_schema` enforces exact metadata equality at load.
+The caller also owns reference processing, episode/clip boundaries, history,
+terminal handling and reset masks. Supply only complete valid windows. Each
+feature layout or motion distribution supplies its own reference windows and
+trained prior.
+
+A learner consumes the resulting score through the caller's explicit reward
+composition. The algorithm has no policy optimizer, environment adapter,
+simulator import or reward time-step convention. It can be used with different
+RL learners or evaluated on saved trajectories without a learner.
+
+## Public interfaces
+
+| API | Input | Output |
+| --- | --- | --- |
+| `FlowVelocityModel` | normalized path point `[B,W,D]`, `tau [B]` | velocity `[B,W,D]` |
+| `flow_matching_loss` | model, normalized windows, noise sample count | scalar differentiable MSE |
+| `fit_quantiles` | raw training windows, quantile settings | per-feature low/high vectors |
+| `train_flow_prior` | raw windows, `FlowTrainingConfig`, optional heldout windows | path to `prior.pt` |
+| `FlowMotionPrior.load_checkpoint` | checkpoint, expected dimensions/schema | frozen model and quantiles |
+| `FlowMotionScorer.score` | raw windows, noise or generator, explicit statistics update flag | `FlowScore` |
+
+`FlowScore.reward`, `raw_error` and `normalized_error` are `[B]` tensors;
+`per_time_error` is raw `[K,B]`, in the configured scoring-time order.
+
+### Train the prior
 
 ```python
 from mbdac.flow_matching import FlowTrainingConfig, train_flow_prior
 
-# windows: your prepared finite float tensor [N,W,F], in a documented layout.
+# reference_windows: caller-prepared [N,W,D] finite floating tensor.
+schema = {"columns": ["feature_a", "feature_b"], "sample_dt": 0.02}
 checkpoint = train_flow_prior(
-    windows, "logs/my_flow_prior",
+    reference_windows, "logs/my_flow_prior",
     FlowTrainingConfig(epochs=2000, batch_size=1024, num_noise_samples=10),
-    feature_schema={"layout": "my_motion_v1", "sample_dt": 0.02},
+    feature_schema=schema,
+    validation_windows=heldout_windows,  # optional, same W/D layout
     device="cuda:0",
 )
 ```
 
-Defaults: DiT width256, four heads, two layers, dropout0; AdamW lr3e-4,
-weight decay1e-4, gradient norm cap1, seed42, span floor1e-4. One epoch visits all
-supplied windows in shuffled batches. Updates per epoch are `ceil(N/batch_size)`;
-the default2000 epochs do not generally mean2000 updates. This offline function
-seeds and uses PyTorch's global RNG; it is not a background learner callback.
+The convenience trainer fits quantiles on training windows only and uses AdamW.
+Defaults are width256, four heads, two layers, dropout0, lr3e-4, weight decay1e-4,
+gradient norm cap1 and seed42. Each epoch visits all windows once in shuffled
+batches, so optimizer updates are `epochs * ceil(N/batch_size)`.
+`report.json` records configuration, actual updates and per-epoch velocity MSE.
+Optional validation uses the training quantiles and fixed evaluation noise/time
+samples. Split source clips/episodes before preparing heldout windows; the
+trainer cannot infer independence from feature tensors.
 
-For already retargeted kinematic NPZ clips and an explicit `MotionFeatureSchema`,
-the separate convenience CLI builds clip-local stride-one windows:
+For custom data pipelines, use `flow_matching_loss` directly with your model,
+optimizer and normalized batches. It samples independent continuous times and
+noise, with an optional device-matched generator.
+
+### Array training CLI
+
+Save generic feature windows with
+`numpy.savez("windows.npz", features=reference_windows_numpy)`:
 
 ```bash
 python -m mbdac.flow_matching.pretrain \
-  --references /path/to/reference_manifest.json \
-  --feature-schema /path/to/feature_schema.json \
-  --output logs/my_flow_prior --device cuda:0 --epochs 2000
+  --windows /path/to/windows.npz --output logs/my_flow_prior \
+  --feature-schema /path/to/layout.json \
+  --epochs 2000 --batch-size 1024 --device cuda:0
 ```
 
-The CLI reads arrays and names; no simulator runs. The
-[existing motion preparation guide](smp_flashsac.md#smp-的明确组合方式) describes
-the kinematic input/schema boundary. Raw motion retargeting belongs outside the
-algorithm module.
+`--feature-schema` is optional JSON metadata. `--validation-windows` accepts a
+separate NPZ with the same `features` layout. The CLI exposes all training
+configuration fields, including quantile settings and time embedding scale.
+No kinematic archive convention, robot schema or retargeting tool is required.
 
-## Frozen online scoring
+### Score new windows
 
 ```python
 import torch
-from mbdac.flow_matching import FlowMotionPrior, FlowMotionScorer, legacy_score_times
+from mbdac.flow_matching import FlowMotionPrior, FlowMotionScorer
 
 prior = FlowMotionPrior.load_checkpoint(
     checkpoint, device="cuda:0",
-    expected_feature_dim=windows.shape[-1],
-    expected_window_size=windows.shape[1],
-    expected_feature_schema={"layout": "my_motion_v1", "sample_dt": 0.02},
+    expected_feature_dim=reference_windows.shape[-1],
+    expected_window_size=reference_windows.shape[1],
+    expected_feature_schema=schema,
 )
-scorer = FlowMotionScorer(prior, times=legacy_score_times(), ws=4.0)
-noise_rng = torch.Generator(device="cuda:0").manual_seed(123)
-result = scorer.score(valid_windows, generator=noise_rng, update_normalizer=True)
-style_reward = result.reward  # [B]; combine with task rewards in your adapter
+scorer = FlowMotionScorer(prior, times=(0.2, 0.5, 0.8), ws=4.0)
+rng = torch.Generator(device="cuda:0").manual_seed(123)
+training_score = scorer.score(valid_windows, generator=rng, update_normalizer=True)
+style_reward = training_score.reward
+
+# Evaluation uses fixed saved scoring statistics.
+evaluation_score = scorer.score(eval_windows, generator=rng)
 ```
 
-You may choose continuous `times=(0.2, 0.5, 0.8)` explicitly. To reproduce the
-trial's historical score locations, `legacy_score_times((8,15,22))` maps cosine50
-DDPM labels by `tau=sqrt(alpha_bar)/(sqrt(alpha_bar)+sqrt(1-alpha_bar))`, yielding
-approximately `(0.768424, 0.640753, 0.528123)`. This preserves signal/noise ratio,
-not equivalence of DDPM and Flow errors. These are score locations, not ODE steps.
+Scoring times are arbitrary explicit continuous values in `(0,1)`; their choice
+is a research/configuration decision. All model weights stay frozen, and scoring
+runs without autograd. The consuming learner learns from the provided reward
+through its own update rule.
 
-At each configured time, draw independent noise, construct the linear path and
-compute
+## Scoring state, randomness and checkpoints
 
-```text
-e_k = mean_W,F((v_theta(x_tau_k, 50*tau_k) - (X-epsilon_k))**2)
-s = exp(-ws * mean_k(e_k / max(mu_k, min_value)))
-```
+- Statistics updates are opt-in; `update_normalizer=False` is the default.
+  Each time index starts with mean1/count0. If requested, its whole batch updates
+  the count-weighted mean before scoring. `min_value` defaults to1e-4.
+- `max_count=None` includes all samples. An optional nonnegative integer cap
+  accepts a whole batch while the previous count is below the cap; the final
+  batch can cross it. A cap of0 freezes statistics from initialization.
+- Save `scorer.normalizer_state_dict()` and restore it with
+  `load_normalizer_state_dict`. Times, score weight, normalization mode, floor
+  and cap must match. Invalid means/counts and incompatible configurations are
+  rejected. A full scorer `state_dict()` also includes the frozen prior.
+- Explicit `noise=[K,B,W,D]` permits deterministic comparisons and consumes no
+  global RNG. Otherwise, noise is drawn once per time in configured order. An
+  optional generator must match the prior device. Save its state separately
+  when needed. Offline convenience training seeds global PyTorch RNG.
+- Version2 prior checkpoints contain model configuration/weights, quantiles,
+  feature metadata and the linear-path contract. Loading uses
+  `weights_only=True` and rejects other formats/versions. The inference
+  checkpoint does not save optimizer or simulator state. The convenience
+  trainer refuses to overwrite an existing training output.
 
-`FlowScore.reward`, `raw_error` and `normalized_error` have shape `[B]`;
-`per_time_error` is raw `[K,B]`. `normalize=False` selects raw mean error for
-the exponential. The scalar is a residual-derived style reward, **not a density,
-likelihood, catching probability or guarantee of natural motion**. The module
-does not currently implement Flow ODE sampling/GSI.
-
-Model weights remain frozen, and scoring runs under `no_grad`: the RL policy
-learns from the reward through its own algorithm, not by backpropagating the
-Flow network into actions. Only explicitly requested normalizer updates mutate
-scoring state. `update_normalizer=False` is the default, including evaluation.
-If requested, update each time's count-weighted mean before dividing. Counts
-stop updating once the previous count is strictly greater than50,000,000;
-the last whole batch may cross this cap. The denominator floor defaults to1e-4.
-
-## Randomness, persistence and compatibility
-
-- For deterministic comparison supply `noise=[K,B,W,F]`. This consumes no global
-  RNG; it cannot accompany `generator`. Otherwise a generator must match the
-  prior device; noise is drawn in configured time order, one `[B,W,F]` draw per
-  time. Save its state separately if your experiment needs continuation.
-- Save `scorer.normalizer_state_dict()` alongside learner state. Restore with
-  `load_normalizer_state_dict`; mismatched times, weight, normalization mode,
-  floor or cap are rejected. Save the feature-history/reset state in the task.
-  The scorer's full `state_dict()` also contains the frozen model.
-- New prior checkpoints declare `checkpoint_version=1`. The original unversioned
-  linear-flow v1 checkpoints remain loadable. Loading uses `weights_only=True`,
-  checks the path/type/architecture and rejects unsupported versions. Optimizer
-  and RNG fields are provenance/training metadata; no resumable-training API or
-  simulator-state restoration is promised. Training refuses to overwrite an
-  existing `prior.pt`.
-- `FrozenFlowPrior` remains the legacy v1 compatibility API. It retains
-  `fixed_timesteps=(8,15,22)`, the50-slot normalizer and `scheduler.num_timesteps`
-  expected by the old experiment adapter. New integrations should use
-  `FlowMotionPrior` + `FlowMotionScorer`, whose public interface has no scheduler,
-  learner or environment dependency. Normalizer indices differ; do not load
-  a legacy50-slot normalizer directly into the new K-slot scorer.
-
-The frozen Flow prior and the optional reset generator are separate capabilities.
-Using the Flow scorer does not replace an experiment's DDPM GSI or task reset
-implementation.
-
-## Verification and research status
-
-Run from a source checkout with the dev extra:
+## Verification
 
 ```bash
 python -m pytest tests/test_flow_matching.py
 python -m examples.flow_matching.standalone --output /tmp/flow_prior_smoke
 ```
 
-Tests cover path/loss math, explicit-noise residuals, legacy score parity,
-normalizer persistence/configuration, checkpoint validation, real small CPU
-training and import independence. They verify the interface; they do not certify
-policy quality. The single-seed R1/Dex3 V9 trial that motivated this module did
-not improve the final52k policy over its matched diffusion baseline. This module
-is provided for controlled research, without a general performance claim.
+The tests verify native continuous-time path/loss math and gradients, manual
+velocity residuals, scoring state, checkpoint contracts, actual small CPU
+training, training-only quantiles with heldout data, generic dimensions including
+single-frame windows, CLI training and dependency isolation. Tests block the
+older motion-prior package, policy learners and simulator imports while training
+and scoring this module. Interface tests establish reusability of the algorithm;
+policy quality for a new application requires its own evaluation.
 
-The model and shared SMP utilities retain their existing
-[source attribution and licensing limits](../src/mbdac/smp/PROVENANCE.md).
-Our linear-path objective, standalone API and scoring/training orchestration are
-local additions; the upstream SMP snapshot is not relicensed by this addition.
+The DiT architecture retains its [source attribution and applicable notices](../src/mbdac/flow_matching/PROVENANCE.md).
