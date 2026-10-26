@@ -10,3 +10,12 @@
 - During actor updates freeze world model, critic, and discriminator parameters while preserving input gradients.
 - Keep source attribution and licenses for reused SuperMimic / RSL-RL code.
 - Do not delegate to subagents unless the human explicitly authorizes delegation.
+
+## Git publication
+
+- Publish approved, tested changes to `main` unless the user requests another branch.
+- Use author and committer `chengh-wang <wang.chengh@northeastern.edu>`.
+- Do not create `codex/*` branches for this repository.
+- Preserve existing local work before switching branches. Keep superseded research
+  snapshots separate from the current implementation; do not restore withdrawn
+  learner changes while consolidating branches.

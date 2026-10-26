@@ -1,5 +1,11 @@
 # Provenance
 
+- `mbdac.flow_matching` implements the local continuous-time Flow Matching SMP
+  variant. Its self-contained velocity model adapts the attributed SMP DiT
+  architecture; training, scoring and persistence have no dependency on the
+  older prior package or a simulator. Source notices and licensing limits are
+  retained in `src/mbdac/flow_matching/PROVENANCE.md`.
+
 - `FlashSAC` / `SMPFlashSAC` use a separately pinned FlashSAC numerical subset at
   `87edc9061150ae9e962dd84e6544e27a1554b3ab` (Holiday Robotics, MIT), with
   simulator-free replay shape descriptors and a local tensor runner. This is

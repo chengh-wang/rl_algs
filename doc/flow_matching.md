@@ -16,7 +16,7 @@ X = 2 * (F - q_low) / (q_high - q_low + 1e-8) - 1
 ```
 
 The quantile probabilities and minimum span are configurable; defaults are
-q01/q99 and1e-4. Values are not clipped. For each window, sample Gaussian noise
+q01/q99 and 1e-4. Values are not clipped. For each window, sample Gaussian noise
 and a continuous time:
 
 ```text
@@ -26,10 +26,10 @@ u = X - epsilon
 L(theta) = mean((v_theta(x_tau, tau) - u)**2)
 ```
 
-The noise endpoint is0 and the data endpoint is1. `FlowVelocityModel` is a
+The noise endpoint is 0 and the data endpoint is 1. `FlowVelocityModel` is a
 continuous-time DiT. Its public input time is always `tau in [0,1]`; optional
 `time_embedding_scale` rescales the internal sinusoidal embedding and is part
-of the checkpointed model configuration (default1).
+of the checkpointed model configuration (default 1).
 
 After training, freeze the model. At each explicitly configured scoring time,
 sample independent noise and calculate
@@ -96,8 +96,8 @@ checkpoint = train_flow_prior(
 ```
 
 The convenience trainer fits quantiles on training windows only and uses AdamW.
-Defaults are width256, four heads, two layers, dropout0, lr3e-4, weight decay1e-4,
-gradient norm cap1 and seed42. Each epoch visits all windows once in shuffled
+Defaults are width 256, four heads, two layers, dropout 0, lr 3e-4, weight decay 1e-4,
+gradient norm cap 1 and seed 42. Each epoch visits all windows once in shuffled
 batches, so optimizer updates are `epochs * ceil(N/batch_size)`.
 `report.json` records configuration, actual updates and per-epoch velocity MSE.
 Optional validation uses the training quantiles and fixed evaluation noise/time
@@ -154,11 +154,11 @@ through its own update rule.
 ## Scoring state, randomness and checkpoints
 
 - Statistics updates are opt-in; `update_normalizer=False` is the default.
-  Each time index starts with mean1/count0. If requested, its whole batch updates
-  the count-weighted mean before scoring. `min_value` defaults to1e-4.
+  Each time index starts with mean 1 / count 0. If requested, its whole batch updates
+  the count-weighted mean before scoring. `min_value` defaults to 1e-4.
 - `max_count=None` includes all samples. An optional nonnegative integer cap
   accepts a whole batch while the previous count is below the cap; the final
-  batch can cross it. A cap of0 freezes statistics from initialization.
+  batch can cross it. A cap of 0 freezes statistics from initialization.
 - Save `scorer.normalizer_state_dict()` and restore it with
   `load_normalizer_state_dict`. Times, score weight, normalization mode, floor
   and cap must match. Invalid means/counts and incompatible configurations are
@@ -167,7 +167,7 @@ through its own update rule.
   global RNG. Otherwise, noise is drawn once per time in configured order. An
   optional generator must match the prior device. Save its state separately
   when needed. Offline convenience training seeds global PyTorch RNG.
-- Version2 prior checkpoints contain model configuration/weights, quantiles,
+- Version 2 prior checkpoints contain model configuration/weights, quantiles,
   feature metadata and the linear-path contract. Loading uses
   `weights_only=True` and rejects other formats/versions. The inference
   checkpoint does not save optimizer or simulator state. The convenience

@@ -1,5 +1,9 @@
 # SMP + FlashSAC：独立算法包与任务边界
 
+本文记录既有的 model-free runner 与 motion-prior 集成。通用的 Flow Matching
+SMP 算法使用独立的 [`mbdac.flow_matching` 接口](flow_matching.md)；调用方通过
+明确的奖励组合接入评分，runner 不自动选择或加载 Flow 模型。
+
 ## 包及调用约定
 
 此仓库名为 `rl_algs`，Python distribution/import 名为 `mbdac`。新增模块与已有

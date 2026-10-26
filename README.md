@@ -193,6 +193,18 @@ checkout. Its setup does not use this repository's MJLab 1.2 lockfile or extra.
 
 ## Documentation
 
+The [documentation index](doc/README.md) groups API guides, examples, benchmarks
+and historical validation reports. The repository is organized as follows:
+
+| Path | Contents |
+| --- | --- |
+| `src/mbdac/` | Installed learning algorithms, motion priors, runners and tensor utilities |
+| `examples/` | Source-only task adapters, simulator examples and standalone demos |
+| `tests/` | Algorithm and interface regression tests |
+| `doc/` | User guides, experiment reports and retained comparison figures |
+| `scripts/` | Asset preparation and benchmark tooling |
+| `licenses/` | Upstream source attribution and license notices |
+
 - [Model-based environment contract](doc/task_contract.md)
 - [Physical primitive heads and task formulas](doc/general_task_interface.md)
 - [SMP / FlashSAC API, training and integration](doc/smp_flashsac.md)
@@ -202,9 +214,10 @@ checkout. Its setup does not use this repository's MJLab 1.2 lockfile or extra.
 - [MBDAC implementation audit](doc/mbdac_audit_2026-10-24.md)
 - [Method references, source attribution and notices](licenses/PROVENANCE.md)
 
-Integration validation: **73 CPU tests passed**; the installed wheel passed
-**70 tests with simulator imports disabled**. Optional tests were skipped in
-each suite. Details and the separate R1 GPU update/restore checks are recorded
+The consolidated source suite passed **116 tests** with **7 optional skips**.
+The installed wheel passed all **20 Flow Matching tests**, including training
+and scoring with the older prior package and simulator imports blocked.
+Earlier integration and separate R1 GPU update/restore checks remain recorded
 in the [integration guide](doc/smp_flashsac.md#验收范围).
 
 > [!NOTE]
