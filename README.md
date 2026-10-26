@@ -22,6 +22,11 @@ physics, observations, rewards and action mapping.
 Holosoma **FastSAC** is also available as an external comparison baseline in the
 native velocity example. It is a separate implementation from **FlashSAC**.
 
+**Standalone motion scoring:** [`mbdac.flow_matching`](doc/flow_matching.md)
+trains a Flow Matching motion prior and scores tensor windows independently of
+the learner and simulator. Use it with FlashSAC, PPO or another learner through
+your task's reward adapter. It does not change FlashSAC or own an environment.
+
 ## Installation
 
 Requires Python **3.10+** and PyTorch **2.6+**. Install from this checkout;
@@ -190,6 +195,7 @@ checkout. Its setup does not use this repository's MJLab 1.2 lockfile or extra.
 - [Model-based environment contract](doc/task_contract.md)
 - [Physical primitive heads and task formulas](doc/general_task_interface.md)
 - [SMP / FlashSAC API, training and integration](doc/smp_flashsac.md)
+- [Standalone Flow Matching motion prior: training, scoring and state](doc/flow_matching.md)
 - [Precision tasks: reward objectives, shaping and learner diagnostics](doc/precision_rewards.md)
 - [World-model, actor and critic update schedules](doc/update_schedule_audit.md)
 - [MBDAC implementation audit](doc/mbdac_audit_2026-10-24.md)

@@ -23,6 +23,7 @@ where = ["src"]
 "mbdac.vendor.holosoma" = ["source.json"]
 "mbdac.smp.vendor" = ["PROVENANCE.md"]
 "mbdac.smp" = ["PROVENANCE.md"]
+"mbdac.flow_matching" = ["PROVENANCE.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
